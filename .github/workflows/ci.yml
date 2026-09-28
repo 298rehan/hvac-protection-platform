@@ -1,16 +1,14 @@
-name: Next.js CI with Caching
+name: Frontend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-
-env:
-  NODE_OPTIONS: "--no-deprecation" # Silences the punycode deprecation warning
+    branches: [main]
 
 jobs:
-  build-and-test:
+  admin-frontend:
+    name: Admin Frontend CI
     runs-on: ubuntu-latest
 
     steps:
@@ -20,32 +18,61 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24 # Updated from 20 to prevent GitHub deprecation warnings
+          node-version: 24
+          cache: npm
+          cache-dependency-path: admin-frontend/package-lock.json
 
-      - name: Cache Next.js Build and npm Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            ${{ github.workspace }}/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+      - name: Install Admin Dependencies
+        working-directory: admin-frontend
+        run: npm ci
 
-      - name: Install Dependencies
-        run: npm i
-
-      - name: Run Linter
+      - name: Run Admin Linter
+        working-directory: admin-frontend
         run: npm run lint
 
-      - name: Build Next.js Application
+      - name: Build Admin Frontend
+        working-directory: admin-frontend
         run: npm run build
 
-  deploy:
-    needs: build-and-test
+
+  customer-frontend:
+    name: Customer Frontend CI
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: customer-frontend/package-lock.json
+
+      - name: Install Customer Dependencies
+        working-directory: customer-frontend
+        run: npm ci
+
+      - name: Run Customer Linter
+        working-directory: customer-frontend
+        run: npm run lint
+
+      - name: Build Customer Frontend
+        working-directory: customer-frontend
+        run: npm run build
+
+
+  deploy:
+    name: Deploy
+    needs:
+      - admin-frontend
+      - customer-frontend
+
+    runs-on: ubuntu-latest
+
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - name: Trigger Deployment
-        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK }}" 
+      - name: Trigger Render Deployment
+        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK }}"
