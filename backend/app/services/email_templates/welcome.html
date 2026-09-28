@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_macros.html" import button, detail_table %}
+{% block content %}
+<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
+  Hi {{ first_name }}, thanks for creating your account. You can now browse the HVAC
+  protection plans available in <strong>{{ state_name }}</strong> and enroll in the one
+  that fits your home.
+</p>
+{{ detail_table([('Account email', email), ('Service address', service_address), ('Service region', state_name)]) }}
+<p style="margin:0;font-size:15px;line-height:1.65;color:#334155;">
+  Plan availability and pricing are set by region, so everything you see is priced for your state.
+</p>
+{{ button(customer_app_url + '/plans', 'Browse your plans') }}
+{% endblock %}

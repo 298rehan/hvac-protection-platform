@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_macros.html" import button, detail_table %}
+{% block content %}
+<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
+  A new customer account was created on the customer site.
+</p>
+{{ detail_table([
+  ('Name', full_name),
+  ('Email', email),
+  ('Phone', phone),
+  ('Location', location),
+  ('Service region', state_name),
+  ('Registered', registered_at)
+]) }}
+{{ button(admin_app_url + '/customers/' + customer_id, 'Open customer record') }}
+{% endblock %}

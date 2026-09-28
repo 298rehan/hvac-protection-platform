@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import button, detail_table, status_pill %}
+{% block content %}
+<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
+  Hi {{ first_name }}, we have received your enrollment request for the
+  <strong>{{ plan_name }}</strong> plan. Our team reviews each enrollment before it goes live.
+</p>
+{{ detail_table([
+  ('Reference', '#' + order_number),
+  ('Plan', plan_name),
+  ('Billing', billing_cycle_label),
+  ('Price', price_label),
+  ('Service region', state_name),
+  ('Submitted', submitted_at)
+]) }}
+<p style="margin:0 0 6px;font-size:14px;color:#334155;">Current status: {{ status_pill('PENDING') }}</p>
+<p style="margin:14px 0 0;font-size:15px;line-height:1.65;color:#334155;">
+  You will get another email as soon as your coverage is activated.
+</p>
+{{ button(customer_app_url + '/dashboard/purchases', 'View my purchases') }}
+{% endblock %}

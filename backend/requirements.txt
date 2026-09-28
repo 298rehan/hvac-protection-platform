@@ -1,0 +1,27 @@
+# HVAC Protection Plan Management System - backend dependencies
+# Verified on Python 3.14 / Windows with MySQL 8.0.
+
+# --- Web framework --------------------------------------------------------
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
+
+# --- Database (MySQL) -----------------------------------------------------
+SQLAlchemy==2.0.52
+alembic==1.19.2
+PyMySQL==1.2.0
+# Required by PyMySQL to authenticate against MySQL 8's default
+# caching_sha2_password plugin.
+cryptography==50.0.1
+
+# --- Validation -----------------------------------------------------------
+pydantic==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
+
+# --- Auth -----------------------------------------------------------------
+PyJWT==2.13.0
+bcrypt==5.0.0
+
+# --- Email ----------------------------------------------------------------
+Jinja2==3.1.6

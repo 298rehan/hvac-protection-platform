@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import button, detail_table, status_pill %}
+{% block content %}
+<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
+  Good news {{ first_name }} - your <strong>{{ plan_name }}</strong> coverage is now active.
+</p>
+{{ detail_table([
+  ('Reference', '#' + order_number),
+  ('Plan', plan_name),
+  ('Billing', billing_cycle_label),
+  ('Price', price_label),
+  ('Service region', state_name),
+  ('Activated', activated_at),
+  ('Renews on', expires_at)
+]) }}
+<p style="margin:0 0 6px;font-size:14px;color:#334155;">Current status: {{ status_pill('ACTIVE') }}</p>
+<p style="margin:14px 0 0;font-size:15px;line-height:1.65;color:#334155;">
+  Your plan details and coverage dates are always available in your dashboard.
+</p>
+{{ button(customer_app_url + '/dashboard/my-plan', 'View my plan') }}
+{% endblock %}

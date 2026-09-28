@@ -1,0 +1,25 @@
+# --- Secrets -----------------------------------------------------------
+# Broad on purpose: catches .env, .env.local, .env.*.bak and friends.
+.env*
+!.env.example
+
+# --- Python ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+backend/sent_emails/
+
+# --- Node / Next -------------------------------------------------------
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# --- Editors / OS ------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

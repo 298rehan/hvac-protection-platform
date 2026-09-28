@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_macros.html" import button, detail_table, status_pill %}
+{% block content %}
+<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
+  A new plan enrollment is waiting for approval.
+</p>
+{{ detail_table([
+  ('Reference', '#' + order_number),
+  ('Customer', customer_name),
+  ('Email', customer_email),
+  ('Plan', plan_name),
+  ('Billing', billing_cycle_label),
+  ('Price', price_label),
+  ('Service region', state_name),
+  ('Submitted', submitted_at)
+]) }}
+<p style="margin:0 0 6px;font-size:14px;color:#334155;">Current status: {{ status_pill('PENDING') }}</p>
+{{ button(admin_app_url + '/purchases/' + order_number, 'Review enrollment') }}
+{% endblock %}
