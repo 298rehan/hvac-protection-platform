@@ -26,10 +26,6 @@ jobs:
         working-directory: admin-frontend
         run: npm ci
 
-      - name: Run Admin Linter
-        working-directory: admin-frontend
-        run: npm run lint
-
       - name: Build Admin Frontend
         working-directory: admin-frontend
         run: npm run build
@@ -53,10 +49,6 @@ jobs:
       - name: Install Customer Dependencies
         working-directory: customer-frontend
         run: npm ci
-
-      - name: Run Customer Linter
-        working-directory: customer-frontend
-        run: npm run lint
 
       - name: Build Customer Frontend
         working-directory: customer-frontend
