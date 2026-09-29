@@ -1,17 +1,22 @@
 # --- Stage 1: Build Stage ---
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# Copy package configurations first to leverage caching
 COPY package*.json ./
 
-# Limit npm memory usage and download overhead
-RUN npm ci --quiet --no-audit --no-fund
+# Force npm to use minimal memory and prevent network timeout hangs
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm ci --quiet --no-audit --no-fund --maxsockets 3
 
 COPY . .
-# Run build with limited Node memory to prevent EC2 freezing
-ENV NODE_OPTIONS="--max-old-space-size=450"
+
+# CRUCIAL: Strongly restrict Node memory during compilation to prevent EC2 crashes
+ENV NODE_OPTIONS="--max-old-space-size=400 --initial-old-space-size=100"
 RUN npm run build
 
-# Clean up development dependencies to save final image space
+# Clean out development modules before moving to production stage
 RUN npm prune --production
 
 
@@ -19,11 +24,16 @@ RUN npm prune --production
 FROM node:20-alpine
 WORKDIR /app
 
-# Copy only what is strictly necessary from the builder stage
+# Copy production configurations and build files
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
+
+# IMPORTANT NOTE FOR COPYING FILES:
+# If you are using standard React/Vite, it outputs to '/app/dist'
+# If you are using Next.js, change '/app/dist' to '/app/.next'
+# If you are using standard Next.js, you might also need to copy '/app/public'
 COPY --from=builder /app/dist ./dist 
-# Note: If your build output goes to a folder named '.next' or 'build' instead of 'dist', change '/app/dist' above to match it.
 
 EXPOSE 3000
+
 CMD ["npm", "start"]
