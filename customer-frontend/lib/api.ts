@@ -7,7 +7,7 @@
  */
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "https://hvac-protection-platform-1.onrender.com/";
 
 const TOKEN_KEY = "hvac_customer_token";
 

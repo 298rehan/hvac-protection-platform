@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     # --- App ---------------------------------------------------------------
     app_name: str = "HVAC Protection Plan API"
     environment: str = "development"
-    customer_app_url: str = "http://localhost:3000"
-    admin_app_url: str = "http://localhost:3001"
+    customer_app_url: str = "https://hvac-protection-platform.onrender.com"
+    admin_app_url: str = "https://admin-frontend-cg6k.onrender.com"
 
     # --- Database ----------------------------------------------------------
     # MySQL via the PyMySQL driver. The real value always comes from .env;
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 720
 
     # --- CORS --------------------------------------------------------------
-    cors_origins: str = "http://localhost:3000,http://localhost:3001"
+    cors_origins: str = "https://hvac-protection-platform.onrender.com,https://admin-frontend-cg6k.onrender.com"
 
     # --- Email -------------------------------------------------------------
     email_mode: str = "console"  # console | file | smtp
