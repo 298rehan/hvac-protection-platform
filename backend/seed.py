@@ -215,7 +215,8 @@ def seed_plans(db: Session) -> list[Plan]:
     for plan in plans:
         db.refresh(plan)
     region_count = sum(len(p.regions) for p in plans)
-    print(f"  Created {len(plans)} plans with {region_count} regional price rows.")
+    print(
+        f"  Created {len(plans)} plans with {region_count} regional price rows.")
     return plans
 
 
@@ -317,11 +318,12 @@ def seed_purchases(db: Session, admin: User, customers: list[User], plans: list[
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed the HVAC demo database.")
+    parser = argparse.ArgumentParser(
+        description="Seed the HVAC demo database.")
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Delete all existing users, plans and purchases before seeding.",
+        help="Delete all existing user, plans and purchases before seeding.",
     )
     args = parser.parse_args()
 
