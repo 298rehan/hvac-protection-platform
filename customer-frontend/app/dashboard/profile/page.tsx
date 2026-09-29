@@ -190,7 +190,7 @@ function PasswordForm() {
     setStatus(null);
 
     if (next !== confirm) {
-      setStatus({ tone: "error", text: "The two new password do not match." });
+      setStatus({ tone: "error", text: "The two new passwords do not match." });
       return;
     }
 
