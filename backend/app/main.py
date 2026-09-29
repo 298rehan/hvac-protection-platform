@@ -1,4 +1,4 @@
-"""FastAPI application entry point.
+"""FastAPI application entry point
 
 Run locally with:  uvicorn app.main:app --reload --port 8000
 Interactive docs:  http://localhost:8000/docs
@@ -90,13 +90,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """Flatten Pydantic's error list into one readable sentence."""
     problems = []
     for error in exc.errors():
-        location = [str(part) for part in error["loc"] if part not in ("body", "query", "path")]
+        location = [str(part) for part in error["loc"]
+                    if part not in ("body", "query", "path")]
         field = ".".join(location) or "request"
         problems.append(f"{field}: {error['msg']}")
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": "; ".join(problems) or "Invalid request.", "errors": exc.errors()},
+        content={"detail": "; ".join(
+            problems) or "Invalid request.", "errors": exc.errors()},
     )
 
 
@@ -138,13 +140,15 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     the service layer does not pre-check.
     """
     # Logged server-side only - `exc.orig` contains the offending values.
-    logger.warning("Database integrity error on %s: %s", request.url.path, exc.orig)
+    logger.warning("Database integrity error on %s: %s",
+                   request.url.path, exc.orig)
     code = _db_error_code(exc)
 
     if code == MYSQL_DUPLICATE_ENTRY:
         raw = str(getattr(exc, "orig", "")).lower()
         detail = next(
-            (message for key, message in DUPLICATE_KEY_MESSAGES.items() if key.lower() in raw),
+            (message for key, message in DUPLICATE_KEY_MESSAGES.items()
+             if key.lower() in raw),
             "That record already exists.",
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": detail})
@@ -162,7 +166,8 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     if code == MYSQL_CHILD_ROW_MISSING_PARENT:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"detail": "That request refers to a record that does not exist."},
+            content={
+                "detail": "That request refers to a record that does not exist."},
         )
 
     if code in (MYSQL_COLUMN_CANNOT_BE_NULL, MYSQL_DATA_TOO_LONG):
