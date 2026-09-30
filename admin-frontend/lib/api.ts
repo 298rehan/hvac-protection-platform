@@ -10,7 +10,7 @@
  */
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "https://hvac-protection-platform-1.onrender.com";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://16.16.187.135";
 
 const TOKEN_KEY = "hvac_admin_token";
 
