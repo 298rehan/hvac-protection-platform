@@ -47,10 +47,26 @@ export function formatDateTime(value: string | null | undefined): string {
 
 /** Tailwind classes for each purchase status badge. */
 export const STATUS_STYLES: Record<PurchaseStatus, string> = {
-  PENDING: "bg-amber-100 text-amber-800 ring-amber-200",
-  ACTIVE: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-  CANCELLED: "bg-rose-100 text-rose-800 ring-rose-200",
-  EXPIRED: "bg-slate-200 text-slate-700 ring-slate-300",
+  PENDING: "bg-amber-50 text-amber-800 ring-amber-200",
+  ACTIVE: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  CANCELLED: "bg-rose-50 text-rose-700 ring-rose-200",
+  EXPIRED: "bg-slate-100 text-slate-600 ring-slate-200",
+};
+
+/** Indicator dot colour shown inside each status badge. */
+export const STATUS_DOTS: Record<PurchaseStatus, string> = {
+  PENDING: "bg-amber-500",
+  ACTIVE: "bg-emerald-500",
+  CANCELLED: "bg-rose-500",
+  EXPIRED: "bg-slate-400",
+};
+
+/** Human-readable status names; the API values stay upper-case. */
+export const STATUS_LABELS: Record<PurchaseStatus, string> = {
+  PENDING: "Pending",
+  ACTIVE: "Active",
+  CANCELLED: "Cancelled",
+  EXPIRED: "Expired",
 };
 
 export const STATUS_DESCRIPTIONS: Record<PurchaseStatus, string> = {

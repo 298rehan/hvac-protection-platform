@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
+import { ChevronDownIcon } from "@/components/icons";
 import { PlanCatalogue } from "@/components/plan-catalogue";
-import { Card } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "HVAC Protection Plans",
@@ -30,12 +30,15 @@ const FAQ = [
 export default function PlansPage() {
   return (
     <>
-      <section className="border-b border-slate-200 bg-slate-50">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+      <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+        <div className="mx-auto max-w-7xl px-4 py-14 text-center sm:px-6 lg:px-8 lg:py-20">
+          <p className="text-xs font-bold uppercase tracking-widest text-brand-600">
+            Plans and pricing
+          </p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-balance text-slate-900 sm:text-5xl">
             HVAC protection plans
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600">
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-pretty text-slate-600 sm:text-lg">
             Every plan covers scheduled maintenance and priority service. The difference
             is how often we visit and how much of a failure is covered. Prices below come
             straight from our service region pricing.
@@ -48,20 +51,21 @@ export default function PlansPage() {
       </section>
 
       <section className="border-t border-slate-200 bg-slate-50">
-        <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+        <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <h2 className="text-center text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Common questions
           </h2>
-          <div className="mt-8 space-y-4">
-            {FAQ.map((item) => (
-              <Card key={item.question} className="p-6">
-                <h3 className="text-base font-semibold text-slate-900">
+          <div className="mt-10 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {FAQ.map((item, index) => (
+              <details key={item.question} className="group" open={index === 0}>
+                <summary className="flex cursor-pointer items-center justify-between gap-4 px-5 py-4 text-left text-base font-semibold text-slate-900 transition-colors hover:bg-slate-50 sm:px-6">
                   {item.question}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  <ChevronDownIcon className="h-5 w-5 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
+                </summary>
+                <p className="px-5 pb-5 text-sm leading-relaxed text-slate-600 sm:px-6">
                   {item.answer}
                 </p>
-              </Card>
+              </details>
             ))}
           </div>
         </div>

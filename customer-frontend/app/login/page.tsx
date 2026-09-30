@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
-import { Field, Input } from "@/components/form";
-import { Alert, Button, Card, Spinner } from "@/components/ui";
+import { AuthShell } from "@/components/auth-shell";
+import { Field, Input, PasswordInput } from "@/components/form";
+import { Alert, Button, Card, PageLoader } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -39,11 +40,11 @@ function LoginForm() {
   }
 
   return (
-    <Card className="p-8">
+    <Card className="p-6 sm:p-8">
       <h1 className="text-2xl font-bold tracking-tight text-slate-900">
         Sign in to your account
       </h1>
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm leading-relaxed text-slate-600">
         Manage your protection plan, review enrollments and update your service address.
       </p>
 
@@ -64,10 +65,9 @@ function LoginForm() {
         </Field>
 
         <Field label="Password" htmlFor="password">
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="current-password"
             required
             value={password}
@@ -77,7 +77,17 @@ function LoginForm() {
         </Field>
 
         <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-          {submitting ? "Signing in..." : "Sign in"}
+          {submitting ? (
+            <>
+              <span
+                aria-hidden
+                className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+              />
+              Signing in...
+            </>
+          ) : (
+            "Sign in"
+          )}
         </Button>
       </form>
 
@@ -88,11 +98,11 @@ function LoginForm() {
         </Link>
       </p>
 
-      <div className="mt-8 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      <div className="mt-8 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           Demo customer login
         </p>
-        <p className="mt-1.5 text-sm text-slate-700">
+        <p className="mt-1.5 font-mono text-[13px] text-slate-700 break-all">
           maria.alvarez@example.com / Customer123!
         </p>
         <p className="mt-1 text-xs text-slate-500">
@@ -105,16 +115,10 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="mx-auto max-w-md px-4 py-12 sm:px-6 lg:py-20">
-      <Suspense
-        fallback={
-          <div className="flex justify-center py-16">
-            <Spinner />
-          </div>
-        }
-      >
+    <AuthShell>
+      <Suspense fallback={<PageLoader />}>
         <LoginForm />
       </Suspense>
-    </div>
+    </AuthShell>
   );
 }

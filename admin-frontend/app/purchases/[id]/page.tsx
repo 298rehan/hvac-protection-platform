@@ -6,13 +6,18 @@ import { useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
 import { Field, Textarea } from "@/components/form";
+import { ArrowRightIcon, MailIcon, MapPinIcon, PhoneIcon } from "@/components/icons";
 import {
   Alert,
+  Avatar,
+  BackLink,
   Button,
   Card,
+  CardHeader,
   CheckIcon,
   DetailRow,
-  Spinner,
+  PageHeader,
+  PageLoader,
   StatusBadge,
 } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
@@ -23,6 +28,8 @@ import {
   formatDateTime,
   formatMoney,
   STATUS_DESCRIPTIONS,
+  STATUS_DOTS,
+  STATUS_LABELS,
 } from "@/lib/format";
 import { fetchPurchase, updatePurchaseStatus } from "@/services/adminService";
 import type { PurchaseDetail, PurchaseStatus } from "@/types";
@@ -87,13 +94,7 @@ function PurchaseDetailView() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spinner label="Loading purchase" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader label="Loading purchase" />;
 
   if (error && !purchase) return <Alert>{error}</Alert>;
   if (!purchase) return null;
@@ -103,107 +104,100 @@ function PurchaseDetailView() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/purchases"
-        className="text-sm font-medium text-brand-600 hover:text-brand-700"
-      >
-        &larr; Back to purchases
-      </Link>
+      <BackLink href="/purchases">Back to purchases</BackLink>
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-3">
             Enrollment #{purchase.id}
-          </h1>
-          <p className="mt-1.5 text-sm text-slate-600">
-            {purchase.plan.name} &middot; {STATUS_DESCRIPTIONS[purchase.status]}
-          </p>
-        </div>
-        <StatusBadge status={purchase.status} />
-      </header>
+            <StatusBadge status={purchase.status} />
+          </span>
+        }
+        description={
+          <>
+            <span className="font-medium text-slate-800">{purchase.plan.name}</span> &middot;{" "}
+            {STATUS_DESCRIPTIONS[purchase.status]}
+          </>
+        }
+      />
 
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="p-6 lg:col-span-2">
-          <h2 className="text-base font-semibold text-slate-900">Enrollment details</h2>
-          <dl className="mt-4">
-            <DetailRow label="Plan">{purchase.plan.name}</DetailRow>
-            <DetailRow label="Price">
-              {formatMoney(purchase.price)}
-              <span className="ml-1 font-normal text-slate-500">
-                {cycleSuffix(purchase.billing_cycle)}
-              </span>
-            </DetailRow>
-            <DetailRow label="Billing">{cycleLabel(purchase.billing_cycle)}</DetailRow>
-            <DetailRow label="Service region">{purchase.state_code}</DetailRow>
-            <DetailRow label="Submitted">{formatDateTime(purchase.created_at)}</DetailRow>
-            <DetailRow label="Activated">
-              {formatDateTime(purchase.activated_at)}
-            </DetailRow>
-            <DetailRow label="Cancelled">
-              {formatDateTime(purchase.cancelled_at)}
-            </DetailRow>
-            <DetailRow label="Expires">{formatDate(purchase.expires_at)}</DetailRow>
-          </dl>
-
-          <h3 className="mt-8 text-base font-semibold text-slate-900">Status history</h3>
-          <ol className="mt-4 space-y-4">
-            {purchase.status_history.map((entry) => (
-              <li key={entry.id} className="flex gap-3">
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">
-                    {entry.from_status
-                      ? `${entry.from_status} to ${entry.to_status}`
-                      : `Created as ${entry.to_status}`}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {formatDateTime(entry.created_at)}
-                  </p>
-                  {entry.note ? (
-                    <p className="mt-1 text-sm text-slate-600">{entry.note}</p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </Card>
-
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
-          <Card className="p-6">
-            <h2 className="text-base font-semibold text-slate-900">Customer</h2>
-            {purchase.customer ? (
-              <>
-                <p className="mt-3 font-medium text-slate-900">
-                  {purchase.customer.first_name} {purchase.customer.last_name}
-                </p>
-                <p className="text-sm text-slate-600">{purchase.customer.email}</p>
-                <p className="text-sm text-slate-600">{purchase.customer.phone ?? "-"}</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {purchase.customer.city ?? "-"}, {purchase.customer.state ?? "-"}
-                </p>
-                <Link
-                  href={`/customers/${purchase.customer.id}`}
-                  className="mt-4 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700"
-                >
-                  Open customer record
-                </Link>
-              </>
-            ) : (
-              <p className="mt-3 text-sm text-slate-500">Customer record unavailable.</p>
-            )}
+          <Card>
+            <CardHeader title="Enrollment details" />
+            <dl className="px-5 py-2">
+              <DetailRow label="Plan">{purchase.plan.name}</DetailRow>
+              <DetailRow label="Price">
+                {formatMoney(purchase.price)}
+                <span className="ml-1 font-normal text-slate-500">
+                  {cycleSuffix(purchase.billing_cycle)}
+                </span>
+              </DetailRow>
+              <DetailRow label="Billing">{cycleLabel(purchase.billing_cycle)}</DetailRow>
+              <DetailRow label="Service region">{purchase.state_code}</DetailRow>
+              <DetailRow label="Submitted">{formatDateTime(purchase.created_at)}</DetailRow>
+              <DetailRow label="Activated">
+                {formatDateTime(purchase.activated_at)}
+              </DetailRow>
+              <DetailRow label="Cancelled">
+                {formatDateTime(purchase.cancelled_at)}
+              </DetailRow>
+              <DetailRow label="Expires">{formatDate(purchase.expires_at)}</DetailRow>
+            </dl>
           </Card>
 
-          <Card className="p-6">
-            <h2 className="text-base font-semibold text-slate-900">Actions</h2>
-            <p className="mt-1.5 text-sm text-slate-600">
-              Approving sets the status to ACTIVE, records the coverage dates and emails
-              the customer.
-            </p>
+          <Card>
+            <CardHeader title="Status history" />
+            <ol className="px-5 py-5">
+              {purchase.status_history.map((entry, index) => {
+                const last = index === purchase.status_history.length - 1;
+                return (
+                  <li key={entry.id} className="relative flex gap-4 pb-6 last:pb-0">
+                    {!last ? (
+                      <span
+                        aria-hidden
+                        className="absolute top-6 bottom-0 left-[11px] w-px bg-slate-200"
+                      />
+                    ) : null}
+                    <span
+                      aria-hidden
+                      className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-slate-200"
+                    >
+                      <span className={`h-2 w-2 rounded-full ${STATUS_DOTS[entry.to_status]}`} />
+                    </span>
+                    <div className="min-w-0 pt-0.5">
+                      <p className="text-sm font-medium text-slate-900">
+                        {entry.from_status
+                          ? `${STATUS_LABELS[entry.from_status]} to ${STATUS_LABELS[entry.to_status]}`
+                          : `Created as ${STATUS_LABELS[entry.to_status]}`}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {formatDateTime(entry.created_at)}
+                      </p>
+                      {entry.note ? (
+                        <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-100">
+                          {entry.note}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </Card>
+        </div>
 
-            <div className="mt-4">
+        <div className="space-y-6">
+          <Card className={canApprove ? "ring-1 ring-amber-200" : undefined}>
+            <CardHeader
+              title="Actions"
+              description="Approving sets the status to ACTIVE, records the coverage dates and emails the customer."
+            />
+
+            <div className="px-5 py-5">
               <Field label="Internal note (optional)" htmlFor="note">
                 <Textarea
                   id="note"
@@ -213,42 +207,87 @@ function PurchaseDetailView() {
                   maxLength={500}
                 />
               </Field>
-            </div>
+              <p className="mt-1.5 text-right text-xs text-slate-400 tabular-nums">
+                {note.length}/500
+              </p>
 
-            <div className="mt-4 flex flex-col gap-2">
-              <Button
-                className="w-full"
-                disabled={!canApprove || saving}
-                onClick={() => changeStatus("ACTIVE")}
-              >
-                <CheckIcon className="h-4 w-4" />
-                Approve and activate
-              </Button>
-              <Button
-                variant="danger"
-                className="w-full"
-                disabled={!canCancel || saving}
-                onClick={() => changeStatus("CANCELLED")}
-              >
-                Cancel enrollment
-              </Button>
-              {purchase.status === "ACTIVE" ? (
+              <div className="mt-3 flex flex-col gap-2">
                 <Button
-                  variant="subtle"
                   className="w-full"
-                  disabled={saving}
-                  onClick={() => changeStatus("EXPIRED")}
+                  disabled={!canApprove || saving}
+                  onClick={() => changeStatus("ACTIVE")}
                 >
-                  Mark as expired
+                  <CheckIcon className="h-4 w-4" />
+                  Approve and activate
                 </Button>
+                <Button
+                  variant="danger-outline"
+                  className="w-full"
+                  disabled={!canCancel || saving}
+                  onClick={() => changeStatus("CANCELLED")}
+                >
+                  Cancel enrollment
+                </Button>
+                {purchase.status === "ACTIVE" ? (
+                  <Button
+                    variant="subtle"
+                    className="w-full"
+                    disabled={saving}
+                    onClick={() => changeStatus("EXPIRED")}
+                  >
+                    Mark as expired
+                  </Button>
+                ) : null}
+              </div>
+
+              {!canApprove && !canCancel ? (
+                <p className="mt-4 rounded-lg bg-slate-100 px-3 py-2.5 text-sm text-slate-600">
+                  A {purchase.status} enrollment is final and cannot be changed further.
+                </p>
               ) : null}
             </div>
+          </Card>
 
-            {!canApprove && !canCancel ? (
-              <p className="mt-4 rounded-md bg-slate-100 px-3 py-2.5 text-sm text-slate-600">
-                A {purchase.status} enrollment is final and cannot be changed further.
-              </p>
-            ) : null}
+          <Card>
+            <CardHeader title="Customer" />
+            <div className="px-5 py-5">
+              {purchase.customer ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <Avatar
+                      firstName={purchase.customer.first_name}
+                      lastName={purchase.customer.last_name}
+                    />
+                    <p className="font-semibold text-slate-900">
+                      {purchase.customer.first_name} {purchase.customer.last_name}
+                    </p>
+                  </div>
+                  <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                    <li className="flex items-center gap-2.5 break-all">
+                      <MailIcon className="h-4 w-4 text-slate-400" />
+                      {purchase.customer.email}
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <PhoneIcon className="h-4 w-4 text-slate-400" />
+                      {purchase.customer.phone ?? "—"}
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <MapPinIcon className="h-4 w-4 text-slate-400" />
+                      {purchase.customer.city ?? "—"}, {purchase.customer.state ?? "—"}
+                    </li>
+                  </ul>
+                  <Link
+                    href={`/customers/${purchase.customer.id}`}
+                    className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
+                  >
+                    Open customer record
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </Link>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Customer record unavailable.</p>
+              )}
+            </div>
           </Card>
         </div>
       </div>

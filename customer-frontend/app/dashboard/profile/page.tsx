@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-import { Field, Input, Select } from "@/components/form";
-import { Alert, Button, Card } from "@/components/ui";
+import { Field, FormSection, Input, PasswordInput, Select } from "@/components/form";
+import { Alert, Button, Card, CardHeader, PageHeader } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
@@ -24,15 +24,41 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          Profile
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Signed in as <strong>{user.email}</strong> &middot; member since{" "}
-          {formatDate(user.created_at)}
-        </p>
-      </header>
+      <PageHeader
+        title="Profile"
+        description="Manage your contact details, service address and password."
+      />
+
+      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:p-6">
+        <span
+          aria-hidden
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-800"
+        >
+          {`${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-semibold text-slate-900">
+            {user.first_name} {user.last_name}
+          </p>
+          <p className="truncate text-sm text-slate-600">
+            Signed in as <strong className="font-medium text-slate-800">{user.email}</strong>
+          </p>
+        </div>
+        <dl className="flex gap-8 border-t border-slate-100 pt-4 text-sm sm:border-0 sm:pt-0 sm:text-right">
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Member since
+            </dt>
+            <dd className="mt-1 font-semibold text-slate-900">{formatDate(user.created_at)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Region
+            </dt>
+            <dd className="mt-1 font-semibold text-slate-900">{user.state ?? "Not set"}</dd>
+          </div>
+        </dl>
+      </Card>
 
       <ProfileForm regions={regions} onSaved={setUser} />
       <PasswordForm />
@@ -89,88 +115,103 @@ function ProfileForm({
   }
 
   return (
-    <Card className="p-6 sm:p-8">
-      <h2 className="text-lg font-semibold text-slate-900">Contact and service address</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Changing your state changes which plans are offered to you and what they cost.
-      </p>
+    <Card>
+      <CardHeader
+        title="Contact and service address"
+        description="Changing your state changes which plans are offered to you and what they cost."
+      />
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
-        {status ? <Alert tone={status.tone}>{status.text}</Alert> : null}
+      <form onSubmit={handleSubmit} noValidate>
+        <div className="space-y-6 px-5 py-6 sm:px-6">
+          {status ? <Alert tone={status.tone}>{status.text}</Alert> : null}
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="First name" htmlFor="p_first">
-            <Input
-              id="p_first"
-              required
-              value={form.first_name ?? ""}
-              onChange={(e) => update("first_name", e.target.value)}
-            />
-          </Field>
-          <Field label="Last name" htmlFor="p_last">
-            <Input
-              id="p_last"
-              required
-              value={form.last_name ?? ""}
-              onChange={(e) => update("last_name", e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Email address"
-            htmlFor="p_email"
-            hint="Your sign-in email cannot be changed in this demo."
+          <FormSection
+            id="profile-contact"
+            title="Contact details"
+            description="How our team reaches you about your plan."
           >
-            <Input id="p_email" value={user?.email ?? ""} disabled />
-          </Field>
-          <Field label="Phone number" htmlFor="p_phone">
-            <Input
-              id="p_phone"
-              type="tel"
-              value={form.phone ?? ""}
-              onChange={(e) => update("phone", e.target.value)}
-            />
-          </Field>
-          <Field label="Street address" htmlFor="p_address" className="sm:col-span-2">
-            <Input
-              id="p_address"
-              value={form.address ?? ""}
-              onChange={(e) => update("address", e.target.value)}
-            />
-          </Field>
-          <Field label="City" htmlFor="p_city">
-            <Input
-              id="p_city"
-              value={form.city ?? ""}
-              onChange={(e) => update("city", e.target.value)}
-            />
-          </Field>
-          <Field label="State" htmlFor="p_state">
-            <Select
-              id="p_state"
-              value={form.state ?? ""}
-              onChange={(e) => update("state", e.target.value)}
+            <Field label="First name" htmlFor="p_first">
+              <Input
+                id="p_first"
+                required
+                value={form.first_name ?? ""}
+                onChange={(e) => update("first_name", e.target.value)}
+              />
+            </Field>
+            <Field label="Last name" htmlFor="p_last">
+              <Input
+                id="p_last"
+                required
+                value={form.last_name ?? ""}
+                onChange={(e) => update("last_name", e.target.value)}
+              />
+            </Field>
+            <Field
+              label="Email address"
+              htmlFor="p_email"
+              hint="Your sign-in email cannot be changed in this demo."
             >
-              <option value="">Select a state</option>
-              {regions.map((region) => (
-                <option key={region.code} value={region.code}>
-                  {region.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="ZIP code" htmlFor="p_zip">
-            <Input
-              id="p_zip"
-              inputMode="numeric"
-              value={form.zip_code ?? ""}
-              onChange={(e) => update("zip_code", e.target.value)}
-            />
-          </Field>
+              <Input id="p_email" value={user?.email ?? ""} disabled />
+            </Field>
+            <Field label="Phone number" htmlFor="p_phone">
+              <Input
+                id="p_phone"
+                type="tel"
+                value={form.phone ?? ""}
+                onChange={(e) => update("phone", e.target.value)}
+              />
+            </Field>
+          </FormSection>
+
+          <FormSection
+            id="profile-address"
+            title="Service address"
+            description="Your state sets plan availability and pricing."
+          >
+            <Field label="Street address" htmlFor="p_address" className="sm:col-span-2">
+              <Input
+                id="p_address"
+                value={form.address ?? ""}
+                onChange={(e) => update("address", e.target.value)}
+              />
+            </Field>
+            <Field label="City" htmlFor="p_city">
+              <Input
+                id="p_city"
+                value={form.city ?? ""}
+                onChange={(e) => update("city", e.target.value)}
+              />
+            </Field>
+            <Field label="State" htmlFor="p_state">
+              <Select
+                id="p_state"
+                value={form.state ?? ""}
+                onChange={(e) => update("state", e.target.value)}
+              >
+                <option value="">Select a state</option>
+                {regions.map((region) => (
+                  <option key={region.code} value={region.code}>
+                    {region.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="ZIP code" htmlFor="p_zip">
+              <Input
+                id="p_zip"
+                inputMode="numeric"
+                value={form.zip_code ?? ""}
+                onChange={(e) => update("zip_code", e.target.value)}
+              />
+            </Field>
+          </FormSection>
         </div>
 
-        <Button type="submit" disabled={saving}>
-          {saving ? "Saving..." : "Save changes"}
-        </Button>
+        <div className="flex justify-end rounded-b-xl border-t border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-6">
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
       </form>
     </Card>
   );
@@ -209,50 +250,54 @@ function PasswordForm() {
   }
 
   return (
-    <Card className="p-6 sm:p-8">
-      <h2 className="text-lg font-semibold text-slate-900">Change password</h2>
+    <Card>
+      <CardHeader
+        title="Change password"
+        description="Enter your current password, then choose a new one."
+      />
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
-        {status ? <Alert tone={status.tone}>{status.text}</Alert> : null}
+      <form onSubmit={handleSubmit} noValidate>
+        <div className="space-y-5 px-5 py-6 sm:px-6">
+          {status ? <Alert tone={status.tone}>{status.text}</Alert> : null}
 
-        <div className="grid gap-5 sm:grid-cols-3">
-          <Field label="Current password" htmlFor="pw_current">
-            <Input
-              id="pw_current"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-            />
-          </Field>
-          <Field label="New password" htmlFor="pw_new" hint="At least 8 characters.">
-            <Input
-              id="pw_new"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-            />
-          </Field>
-          <Field label="Confirm new password" htmlFor="pw_confirm">
-            <Input
-              id="pw_confirm"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-            />
-          </Field>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field label="Current password" htmlFor="pw_current">
+              <PasswordInput
+                id="pw_current"
+                required
+                autoComplete="current-password"
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+              />
+            </Field>
+            <Field label="New password" htmlFor="pw_new" hint="At least 8 characters.">
+              <PasswordInput
+                id="pw_new"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+              />
+            </Field>
+            <Field label="Confirm new password" htmlFor="pw_confirm">
+              <PasswordInput
+                id="pw_confirm"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+              />
+            </Field>
+          </div>
         </div>
 
-        <Button type="submit" disabled={saving}>
-          {saving ? "Updating..." : "Update password"}
-        </Button>
+        <div className="flex justify-end rounded-b-xl border-t border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-6">
+          <Button type="submit" disabled={saving}>
+            {saving ? "Updating..." : "Update password"}
+          </Button>
+        </div>
       </form>
     </Card>
   );

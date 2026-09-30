@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
-import { Spinner } from "@/components/ui";
+import { PageLoader } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 
 /**
@@ -31,11 +31,7 @@ export function RequireAuth({
   }, [loading, user, router, redirectTo]);
 
   if (loading || !user) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Spinner label="Checking your session" />
-      </div>
-    );
+    return <PageLoader label="Checking your session" />;
   }
 
   return <>{children}</>;

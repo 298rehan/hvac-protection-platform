@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
-import { Field, Input, Select } from "@/components/form";
+import { AuthShell } from "@/components/auth-shell";
+import { Field, Input, PasswordInput, Select } from "@/components/form";
 import { Alert, Button, Card } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -70,24 +71,24 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-      <Card className="p-8">
+    <AuthShell wide>
+      <Card className="p-6 sm:p-8">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           Create your account
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
           We use your service address to determine which protection plans are available
-          in your area and what they cost.
+          in your area and what they cost. It only takes a minute.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-8" noValidate>
           {error ? <Alert>{error}</Alert> : null}
 
           <fieldset>
-            <legend className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+            <legend className="flex w-full items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-500 after:h-px after:flex-1 after:bg-slate-200">
               Your details
             </legend>
-            <div className="mt-4 grid gap-5 sm:grid-cols-2">
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <Field label="First name" htmlFor="first_name">
                 <Input
                   id="first_name"
@@ -131,10 +132,10 @@ export default function RegisterPage() {
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+            <legend className="flex w-full items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-500 after:h-px after:flex-1 after:bg-slate-200">
               Service address
             </legend>
-            <div className="mt-4 grid gap-5 sm:grid-cols-2">
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <Field label="Street address" htmlFor="address" className="sm:col-span-2">
                 <Input
                   id="address"
@@ -188,18 +189,17 @@ export default function RegisterPage() {
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+            <legend className="flex w-full items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-500 after:h-px after:flex-1 after:bg-slate-200">
               Password
             </legend>
-            <div className="mt-4 grid gap-5 sm:grid-cols-2">
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <Field
                 label="Password"
                 htmlFor="password"
                 hint="At least 8 characters, including a letter and a number."
               >
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   required
                   minLength={8}
                   autoComplete="new-password"
@@ -208,9 +208,8 @@ export default function RegisterPage() {
                 />
               </Field>
               <Field label="Confirm password" htmlFor="confirm_password">
-                <Input
+                <PasswordInput
                   id="confirm_password"
-                  type="password"
                   required
                   minLength={8}
                   autoComplete="new-password"
@@ -221,9 +220,21 @@ export default function RegisterPage() {
             </div>
           </fieldset>
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-            {submitting ? "Creating your account..." : "Create account"}
-          </Button>
+          <div className="border-t border-slate-100 pt-6">
+            <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <span
+                    aria-hidden
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  />
+                  Creating your account...
+                </>
+              ) : (
+                "Create account"
+              )}
+            </Button>
+          </div>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-600">
@@ -233,6 +244,6 @@ export default function RegisterPage() {
           </Link>
         </p>
       </Card>
-    </div>
+    </AuthShell>
   );
 }

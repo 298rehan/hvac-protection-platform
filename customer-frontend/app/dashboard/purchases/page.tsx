@@ -3,17 +3,19 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import { ReceiptIcon } from "@/components/icons";
 import {
   Alert,
   ButtonLink,
   Card,
-  DetailRow,
   EmptyState,
-  Spinner,
+  PageHeader,
+  PageLoader,
   StatusBadge,
 } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import {
+  cx,
   cycleLabel,
   cycleSuffix,
   formatDate,
@@ -25,13 +27,7 @@ import type { Purchase } from "@/types";
 
 export default function MyPurchasesPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoader />}>
       <PurchaseList />
     </Suspense>
   );
@@ -52,24 +48,21 @@ function PurchaseList() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner label="Loading your purchases" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader label="Loading your purchases" />;
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          My Purchases
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Every enrollment on your account, including past and cancelled coverage.
-        </p>
-      </header>
+      <PageHeader
+        title="My Purchases"
+        description="Every enrollment on your account, including past and cancelled coverage."
+        actions={
+          purchases.length > 0 ? (
+            <ButtonLink href="/plans" variant="secondary">
+              Browse plans
+            </ButtonLink>
+          ) : null
+        }
+      />
 
       {submittedId ? (
         <Alert tone="success">
@@ -83,6 +76,7 @@ function PurchaseList() {
 
       {purchases.length === 0 ? (
         <EmptyState
+          icon={<ReceiptIcon />}
           title="No purchases yet"
           description="When you enroll in a protection plan it will show up here."
           action={<ButtonLink href="/plans">Browse plans</ButtonLink>}
@@ -90,9 +84,16 @@ function PurchaseList() {
       ) : (
         <div className="space-y-4">
           {purchases.map((purchase) => (
-            <Card key={purchase.id} id={`purchase-${purchase.id}`} className="p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
+            <Card
+              key={purchase.id}
+              id={`purchase-${purchase.id}`}
+              className={cx(
+                "scroll-mt-24 overflow-hidden",
+                String(purchase.id) === submittedId && "ring-2 ring-emerald-300",
+              )}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-5 sm:px-6">
+                <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Reference #{purchase.id}
                   </p>
@@ -106,29 +107,34 @@ function PurchaseList() {
                 <StatusBadge status={purchase.status} />
               </div>
 
-              <dl className="mt-5 grid gap-x-8 sm:grid-cols-2">
-                <DetailRow label="Price">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:grid-cols-3 sm:px-6 lg:grid-cols-6">
+                <Fact label="Price">
                   {formatMoney(purchase.price)}
-                  <span className="ml-1 font-normal text-slate-500">
+                  <span className="font-normal text-slate-500">
                     {cycleSuffix(purchase.billing_cycle)}
                   </span>
-                </DetailRow>
-                <DetailRow label="Billing">
-                  {cycleLabel(purchase.billing_cycle)}
-                </DetailRow>
-                <DetailRow label="Service region">{purchase.state_code}</DetailRow>
-                <DetailRow label="Purchase date">
-                  {formatDate(purchase.created_at)}
-                </DetailRow>
-                <DetailRow label="Activated">
-                  {formatDate(purchase.activated_at)}
-                </DetailRow>
-                <DetailRow label="Expires">{formatDate(purchase.expires_at)}</DetailRow>
+                </Fact>
+                <Fact label="Billing">{cycleLabel(purchase.billing_cycle)}</Fact>
+                <Fact label="Service region">{purchase.state_code}</Fact>
+                <Fact label="Purchase date">{formatDate(purchase.created_at)}</Fact>
+                <Fact label="Activated">{formatDate(purchase.activated_at)}</Fact>
+                <Fact label="Expires">{formatDate(purchase.expires_at)}</Fact>
               </dl>
             </Card>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm font-semibold text-slate-900 tabular-nums">{children}</dd>
     </div>
   );
 }

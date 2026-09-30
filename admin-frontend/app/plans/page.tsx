@@ -4,8 +4,18 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
-import { TableCard, TableEmpty, Td, Th } from "@/components/data-table";
-import { Alert, Button, ButtonLink, Spinner } from "@/components/ui";
+import {
+  TableCard,
+  TableEmpty,
+  TableSkeleton,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
+} from "@/components/data-table";
+import { LayersIcon, PencilIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { Alert, Button, ButtonLink, PageHeader, TogglePill } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { deletePlan, fetchPlans, updatePlan } from "@/services/adminService";
@@ -75,47 +85,59 @@ function PlanList() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Plans</h1>
-          <p className="mt-1.5 text-sm text-slate-600">
-            Creating an active plan with regional pricing makes it appear on the customer
-            site immediately, with no frontend change.
-          </p>
-        </div>
-        <ButtonLink href="/plans/new">Create plan</ButtonLink>
-      </header>
+      <PageHeader
+        title="Plans"
+        description="Creating an active plan with regional pricing makes it appear on the customer site immediately, with no frontend change."
+        actions={
+          <ButtonLink href="/plans/new">
+            <PlusIcon className="h-4.5 w-4.5" />
+            Create plan
+          </ButtonLink>
+        }
+      />
 
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner label="Loading plans" />
-        </div>
+        <TableSkeleton columns={6} rows={4} />
       ) : (
-        <TableCard>
-          <thead className="bg-slate-50">
-            <tr>
-              <Th>Plan</Th>
-              <Th>Base monthly</Th>
-              <Th>Base annual</Th>
-              <Th>Regions</Th>
-              <Th>Order</Th>
-              <Th>Status</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
+        <TableCard
+          footer={
+            plans.length > 0
+              ? `${plans.length} plan${plans.length === 1 ? "" : "s"} · ${plans.filter((plan) => plan.is_active).length} active`
+              : undefined
+          }
+        >
+          <THead>
+            <Th>Plan</Th>
+            <Th className="text-right">Base monthly</Th>
+            <Th className="text-right">Base annual</Th>
+            <Th>Regions</Th>
+            <Th className="text-center">Order</Th>
+            <Th>Status</Th>
+            <Th className="text-right">Actions</Th>
+          </THead>
+          <TBody>
             {plans.length === 0 ? (
-              <TableEmpty colSpan={7} message="No plans yet. Create your first plan." />
+              <TableEmpty
+                colSpan={7}
+                message="No plans yet. Create your first plan."
+                icon={<LayersIcon className="h-5 w-5" />}
+                action={
+                  <ButtonLink href="/plans/new" size="sm">
+                    <PlusIcon className="h-4 w-4" />
+                    Create plan
+                  </ButtonLink>
+                }
+              />
             ) : (
               plans.map((plan) => (
-                <tr key={plan.id} className="hover:bg-slate-50">
+                <Tr key={plan.id} className={plan.is_active ? undefined : "bg-slate-50/50"}>
                   <Td>
                     <Link
                       href={`/plans/${plan.id}`}
-                      className="font-semibold text-brand-600 hover:text-brand-700"
+                      className="font-semibold text-slate-900 hover:text-brand-700"
                     >
                       {plan.name}
                     </Link>
@@ -124,23 +146,25 @@ function PlanList() {
                       {plan.features.length === 1 ? "" : "s"}
                     </p>
                   </Td>
-                  <Td>{formatMoney(plan.base_monthly_price)}</Td>
-                  <Td>
-                    {plan.base_annual_price ? formatMoney(plan.base_annual_price) : "-"}
+                  <Td className="text-right tabular-nums">
+                    {formatMoney(plan.base_monthly_price)}
+                  </Td>
+                  <Td className="text-right tabular-nums">
+                    {plan.base_annual_price ? formatMoney(plan.base_annual_price) : "—"}
                   </Td>
                   <Td>
                     {plan.regions.length === 0 ? (
-                      <span className="text-slate-400">None</span>
+                      <span className="text-xs text-slate-400">None</span>
                     ) : (
                       <span className="flex flex-wrap gap-1">
                         {plan.regions.map((region) => (
                           <span
                             key={region.id}
-                            title={`${region.state_name}: ${formatMoney(region.monthly_price)}/month`}
+                            title={`${region.state_name}: ${formatMoney(region.monthly_price)}/month${region.is_available ? "" : " (paused)"}`}
                             className={
                               region.is_available
-                                ? "rounded bg-brand-50 px-1.5 py-0.5 text-xs font-semibold text-brand-700"
-                                : "rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-400 line-through"
+                                ? "rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-100"
+                                : "rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-400 line-through ring-1 ring-inset ring-slate-200"
                             }
                           >
                             {region.state_code}
@@ -149,25 +173,20 @@ function PlanList() {
                       </span>
                     )}
                   </Td>
-                  <Td>{plan.display_order}</Td>
-                  <Td>
-                    <span
-                      className={
-                        plan.is_active
-                          ? "inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-emerald-800"
-                          : "inline-flex rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-600"
-                      }
-                    >
-                      {plan.is_active ? "Active" : "Inactive"}
-                    </span>
+                  <Td className="text-center tabular-nums text-slate-500">
+                    {plan.display_order}
                   </Td>
                   <Td>
-                    <div className="flex gap-2">
+                    <TogglePill on={plan.is_active} onLabel="Active" offLabel="Inactive" />
+                  </Td>
+                  <Td>
+                    <div className="flex justify-end gap-2">
                       <ButtonLink href={`/plans/${plan.id}/edit`} variant="secondary" size="sm">
+                        <PencilIcon className="h-3.5 w-3.5" />
                         Edit
                       </ButtonLink>
                       <Button
-                        variant="subtle"
+                        variant="secondary"
                         size="sm"
                         disabled={busyId === plan.id}
                         onClick={() => toggleActive(plan)}
@@ -175,19 +194,21 @@ function PlanList() {
                         {plan.is_active ? "Deactivate" : "Activate"}
                       </Button>
                       <Button
-                        variant="danger"
+                        variant="danger-outline"
                         size="sm"
                         disabled={busyId === plan.id}
                         onClick={() => handleDelete(plan)}
+                        aria-label={`Delete ${plan.name}`}
                       >
+                        <TrashIcon className="h-3.5 w-3.5" />
                         Delete
                       </Button>
                     </div>
                   </Td>
-                </tr>
+                </Tr>
               ))
             )}
-          </tbody>
+          </TBody>
         </TableCard>
       )}
     </div>
