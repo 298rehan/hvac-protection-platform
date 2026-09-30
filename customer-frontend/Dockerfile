@@ -12,8 +12,8 @@ RUN npm config set fetch-retries 5 && \
 
 COPY . .
 
-# CRUCIAL: Strongly restrict Node memory during compilation to prevent EC2 crashes
-ENV NODE_OPTIONS="--max-old-space-size=400 --initial-old-space-size=100"
+# Restrict Node memory during compilation to prevent EC2 crashes
+ENV NODE_OPTIONS="--max-old-space-size=400"
 RUN npm run build
 
 # Clean out development modules before moving to production stage
@@ -24,15 +24,9 @@ RUN npm prune --production
 FROM node:20-alpine
 WORKDIR /app
 
-# Copy production configurations and build files
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
-
-# IMPORTANT NOTE FOR COPYING FILES:
-# If you are using standard React/Vite, it outputs to '/app/dist'
-# If you are using Next.js, change '/app/dist' to '/app/.next'
-# If you are using standard Next.js, you might also need to copy '/app/public'
-COPY --from=builder /app/dist ./dist 
+COPY --from=builder /app/.next ./.next
 
 EXPOSE 3000
 

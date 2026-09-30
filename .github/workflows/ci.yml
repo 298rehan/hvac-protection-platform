@@ -1,70 +1,65 @@
-name: Frontend CI
+name: Build and Deploy to EC2
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  admin-frontend:
-    name: Admin Frontend CI
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: admin-frontend/package-lock.json
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Admin Dependencies
-        working-directory: admin-frontend
-        run: npm ci
-
-      - name: Build Admin Frontend
-        working-directory: admin-frontend
-        run: npm run build
-
-
-  customer-frontend:
-    name: Customer Frontend CI
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Build and push Backend
+        uses: docker/build-push-action@v6
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: customer-frontend/package-lock.json
+          context: ./backend
+          push: true
+          tags: ghcr.io/298rehan/hvac-protection-platform-backend:latest
 
-      - name: Install Customer Dependencies
-        working-directory: customer-frontend
-        run: npm ci
+      - name: Build and push Customer Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./customer-frontend
+          push: true
+          tags: ghcr.io/298rehan/hvac-protection-platform-customer:latest
 
-      - name: Build Customer Frontend
-        working-directory: customer-frontend
-        run: npm run build
+      - name: Build and push Admin Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./admin-frontend
+          push: true
+          tags: ghcr.io/298rehan/hvac-protection-platform-admin:latest
 
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/hvac-protection-platform
 
-  deploy:
-    name: Deploy
-    needs:
-      - admin-frontend
-      - customer-frontend
+            git pull origin main
 
-    runs-on: ubuntu-latest
+            docker compose pull
 
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+            docker compose up -d
 
-    steps:
-      - name: Trigger Render Deployment
-        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK }}"
+            docker image prune -f
+
+            docker compose ps
