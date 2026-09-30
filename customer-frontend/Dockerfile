@@ -13,7 +13,7 @@ RUN npm config set fetch-retries 5 && \
 COPY . .
 
 # Restrict Node memory during compilation to prevent EC2 crashes
-ENV NODE_OPTIONS="--max-old-space-size=400 --initial-old-space-size=100"
+ENV NODE_OPTIONS="--max-old-space-size=400"
 RUN npm run build
 
 # Clean out development modules before moving to production stage
