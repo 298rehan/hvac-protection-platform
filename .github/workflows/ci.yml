@@ -52,7 +52,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/hvac-protection-platform
+            cd /home/ubuntu/hvac-project/hvac-protection-platform
 
             git pull origin main
 
