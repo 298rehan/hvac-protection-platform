@@ -10,7 +10,8 @@
  */
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://16.16.187.135";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
+  "http://54.206.86.229";
 
 const TOKEN_KEY = "hvac_admin_token";
 
