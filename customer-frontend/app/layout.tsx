@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { CursorGlow } from "@/components/cursor-glow";
+import { CursorTrail } from "@/components/cursor-trail";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { AuthProvider } from "@/lib/auth-context";
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <main className="flex-1">{children}</main>
           <SiteFooter />
         </AuthProvider>
-        <CursorGlow />
+        <CursorTrail />
       </body>
     </html>
   );

@@ -62,7 +62,7 @@ export default function HomePage() {
   return (
     <>
       {/* Hero */}
-      <section className="spotlight spotlight-dark relative overflow-hidden bg-brand-950">
+      <section className="relative overflow-hidden bg-brand-950">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(72,148,197,0.22),transparent_55%)]"
