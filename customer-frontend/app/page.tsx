@@ -62,7 +62,7 @@ export default function HomePage() {
   return (
     <>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-brand-950">
+      <section className="spotlight spotlight-dark relative overflow-hidden bg-brand-950">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(72,148,197,0.22),transparent_55%)]"
@@ -146,7 +146,7 @@ export default function HomePage() {
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {VALUE_PROPS.map((item) => (
-            <Card key={item.title} className="p-6 transition-shadow hover:shadow-md sm:p-7">
+            <Card key={item.title} className="hover-lift spotlight p-6 sm:p-7">
               <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-brand-100">
                 <item.icon />
               </span>

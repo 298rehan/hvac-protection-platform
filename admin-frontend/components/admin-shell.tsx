@@ -135,11 +135,18 @@ export function AdminShell({ children }: { children: ReactNode }) {
                         aria-hidden
                         className="absolute top-2 bottom-2 -left-3 w-1 rounded-r-full bg-brand-400"
                       />
-                    ) : null}
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="absolute top-2 bottom-2 -left-3 w-1 origin-center scale-y-0 rounded-r-full bg-brand-400/60 transition-transform duration-200 ease-out group-hover:scale-y-100"
+                      />
+                    )}
                     <Icon
                       className={cx(
-                        "h-4.5 w-4.5",
-                        active ? "text-brand-200" : "text-brand-400 group-hover:text-brand-200",
+                        "h-4.5 w-4.5 transition-[color,translate] duration-200",
+                        active
+                          ? "text-brand-200"
+                          : "text-brand-400 group-hover:text-brand-200 motion-safe:group-hover:translate-x-0.5",
                       )}
                     />
                     {item.label}

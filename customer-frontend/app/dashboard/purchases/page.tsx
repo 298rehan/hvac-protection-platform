@@ -88,7 +88,7 @@ function PurchaseList() {
               key={purchase.id}
               id={`purchase-${purchase.id}`}
               className={cx(
-                "scroll-mt-24 overflow-hidden",
+                "spotlight scroll-mt-24 overflow-hidden",
                 String(purchase.id) === submittedId && "ring-2 ring-emerald-300",
               )}
             >

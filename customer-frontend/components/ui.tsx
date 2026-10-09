@@ -16,12 +16,14 @@ import type { PurchaseStatus } from "@/types";
 
 const BUTTON_BASE =
   "inline-flex items-center justify-center gap-2 rounded-lg font-semibold whitespace-nowrap " +
-  "transition-[background-color,color,box-shadow,transform] duration-150 active:translate-y-px " +
+  "transition-[background-color,color,box-shadow,translate] duration-200 ease-out " +
+  "motion-safe:hover:-translate-y-px active:translate-y-px " +
   "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25 " +
   "disabled:pointer-events-none disabled:opacity-55";
 
 const BUTTON_VARIANTS = {
-  primary: "bg-brand-600 text-white shadow-sm shadow-brand-900/10 hover:bg-brand-700",
+  primary:
+    "bg-brand-600 text-white shadow-sm shadow-brand-900/10 hover:bg-brand-700 hover:shadow-md hover:shadow-brand-900/20",
   secondary:
     "bg-white text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 hover:ring-slate-400",
   subtle: "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900",
@@ -308,7 +310,7 @@ export function StatTile({
   icon?: ReactNode;
 }) {
   return (
-    <Card className="flex items-start gap-4 p-5">
+    <Card className="hover-lift spotlight flex items-start gap-4 p-5">
       {icon ? (
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
           {icon}

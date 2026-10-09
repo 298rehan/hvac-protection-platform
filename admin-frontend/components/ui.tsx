@@ -16,12 +16,14 @@ import type { PurchaseStatus } from "@/types";
 
 const BUTTON_BASE =
   "inline-flex items-center justify-center gap-2 rounded-lg font-semibold whitespace-nowrap " +
-  "transition-[background-color,color,box-shadow,transform] duration-150 active:translate-y-px " +
+  "transition-[background-color,color,box-shadow,translate] duration-200 ease-out " +
+  "motion-safe:hover:-translate-y-px active:translate-y-px " +
   "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/25 " +
   "disabled:pointer-events-none disabled:opacity-55";
 
 const BUTTON_VARIANTS = {
-  primary: "bg-brand-600 text-white shadow-sm shadow-brand-900/10 hover:bg-brand-700",
+  primary:
+    "bg-brand-600 text-white shadow-sm shadow-brand-900/10 hover:bg-brand-700 hover:shadow-md hover:shadow-brand-900/20",
   secondary:
     "bg-white text-slate-800 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 hover:ring-slate-400",
   subtle: "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900",
@@ -302,12 +304,12 @@ export function StatCard({
   );
 
   const shell =
-    "block rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
+    "hover-lift spotlight block rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
 
   return href ? (
     <Link
       href={href}
-      className={cx(shell, "transition-[box-shadow,border-color] hover:border-slate-300 hover:shadow-md")}
+      className={shell}
     >
       {body}
     </Link>

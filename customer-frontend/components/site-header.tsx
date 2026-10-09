@@ -190,17 +190,20 @@ function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "group relative rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         active ? "text-brand-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
       )}
     >
       {children}
-      {active ? (
-        <span
-          aria-hidden
-          className="absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full bg-brand-600"
-        />
-      ) : null}
+      <span
+        aria-hidden
+        className={cx(
+          "absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full transition-transform duration-200 ease-out",
+          active
+            ? "bg-brand-600"
+            : "scale-x-0 bg-brand-400 group-hover:scale-x-100",
+        )}
+      />
     </Link>
   );
 }

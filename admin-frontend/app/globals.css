@@ -74,3 +74,101 @@ select.form-select {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Pointer interactions. Positions are written as CSS variables by
+ * <CursorGlow />, so nothing here re-renders React on mouse movement.
+ * ------------------------------------------------------------------ */
+
+/* Soft glow that trails the (unchanged) system cursor. */
+.cursor-glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  width: 320px;
+  height: 320px;
+  margin: -160px 0 0 -160px;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(56, 189, 248, 0.1) 0%,
+    rgba(72, 148, 197, 0.06) 35%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  will-change: transform;
+}
+.cursor-glow[data-visible="true"] {
+  opacity: 1;
+}
+/* Only on large screens with a precise, hovering pointer. */
+@media not all and (hover: hover) and (pointer: fine) and (min-width: 1024px) {
+  .cursor-glow {
+    display: none;
+  }
+}
+
+/* Radial highlight that follows the pointer inside an element. */
+@layer components {
+  .spotlight {
+    position: relative;
+    isolation: isolate;
+  }
+  .spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(
+      var(--spot-size, 360px) circle at var(--spot-x, 50%) var(--spot-y, 50%),
+      var(--spot-color, rgba(72, 148, 197, 0.09)),
+      transparent 70%
+    );
+  }
+  .spotlight-dark {
+    --spot-size: 640px;
+    --spot-color: rgba(125, 182, 218, 0.13);
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .spotlight:hover::before {
+    opacity: 1;
+  }
+}
+
+/*
+ * Gentle lift for cards. Deliberately unlayered so the hover border and shadow
+ * win over the resting border/shadow utilities on the same element.
+ */
+.hover-lift {
+  transition:
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+@media (hover: hover) {
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    border-color: rgba(72, 148, 197, 0.45);
+    box-shadow:
+      0 0 0 1px rgba(72, 148, 197, 0.12),
+      0 12px 28px -12px rgba(15, 47, 74, 0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor-glow,
+  .spotlight::before {
+    display: none;
+  }
+  .hover-lift:hover {
+    transform: none;
+  }
+}

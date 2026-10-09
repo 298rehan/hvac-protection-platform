@@ -17,10 +17,11 @@ export function PlanCard({
   return (
     <div
       className={cx(
-        "relative flex h-full flex-col rounded-xl bg-white p-6 transition-shadow duration-200 sm:p-7",
+        "spotlight relative flex h-full flex-col rounded-xl bg-white p-6 sm:p-7",
         featured
-          ? "border border-brand-500 shadow-lg shadow-brand-900/10 ring-1 ring-brand-500 lg:-my-3 lg:py-10"
-          : "border border-slate-200/80 shadow-sm hover:shadow-md",
+          ? // Keeps its brand ring on hover, so it lifts without the generic hover-lift border.
+            "border border-brand-500 shadow-lg shadow-brand-900/10 ring-1 ring-brand-500 transition-[translate,box-shadow] duration-200 ease-out hover:shadow-xl hover:shadow-brand-900/15 motion-safe:hover:-translate-y-0.5 lg:-my-3 lg:py-10"
+          : "hover-lift border border-slate-200/80 shadow-sm",
       )}
     >
       {featured ? (
