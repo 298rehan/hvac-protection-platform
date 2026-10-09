@@ -53,7 +53,7 @@ def price_label(amount: Decimal, cycle: BillingCycle | str) -> str:
 def send_welcome_email(*, email: str, first_name: str, state_code: str, service_address: str) -> None:
     send_template_email(
         to_email=email,
-        subject="Welcome to Summit Air Protection Planss",
+        subject="Welcome to Summit Air Protection Plans",
         template_name="welcome.html",
         heading="Your account is ready",
         first_name=first_name,
