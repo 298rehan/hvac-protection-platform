@@ -64,11 +64,14 @@ git-ignored.
 
 ## 2. Configure and initialise the main stack
 
+The backend settings (bucket from step 1, key `hvac/terraform.tfstate`, region
+`ap-southeast-2`) are written directly in `versions.tf`, so no `backend.hcl`
+is needed.
+
 ```bash
 cd terraform
-cp backend.hcl.example backend.hcl            # bucket from step 1
 cp terraform.tfvars.example terraform.tfvars  # set cors_allowed_origins!
-terraform init -backend-config=backend.hcl
+terraform init
 terraform fmt -check -recursive
 terraform validate
 ```

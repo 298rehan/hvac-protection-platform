@@ -9,13 +9,14 @@ terraform {
     }
   }
 
-  # Remote state in a dedicated, private, versioned S3 bucket with S3-native
-  # locking. Settings are supplied at init time so no account details live in
-  # source control:
-  #
-  #   terraform init -backend-config=backend.hcl
-  #
-  # See backend.hcl.example and README.md (the state bucket is created once by
-  # ./bootstrap).
-  backend "s3" {}
+  # Remote state in the dedicated, private, versioned bucket created by
+  # ./bootstrap. None of these values are secret. Credentials come from your
+  # AWS CLI profile ($env:AWS_PROFILE = "hvac-dev"), never from this file.
+  backend "s3" {
+    bucket       = "hvac-tfstate-594775505885-ap-southeast-2"
+    key          = "hvac/terraform.tfstate"
+    region       = "ap-southeast-2"
+    encrypt      = true
+    use_lockfile = true # S3-native state locking (Terraform >= 1.10)
+  }
 }
