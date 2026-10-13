@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. Contains no secrets -
+# credentials come from your AWS CLI profile, never from this file.
+
+aws_region          = "ap-southeast-2"
+aws_profile         = "hvac-dev"
+allowed_account_ids = ["594775505885"]
+
+project_name = "hvac"
+environment  = "prod"
+
+# Exact origins the customer and admin apps are served from (scheme + host
+# [+ port]). Browsers upload photos directly to S3 from these pages.
+cors_allowed_origins = [
+  "https://app.example.com",
+  "https://admin.example.com",
+]
+
+noncurrent_version_retention_days = 90

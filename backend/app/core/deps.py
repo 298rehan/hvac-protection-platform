@@ -61,7 +61,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 def require_admin(user: CurrentUser) -> User:
-    """Guard for every /api/admin route and admin-only plan / purchase actions."""
+    """Guard for admin-only plan, purchase and service-request actions."""
     if user.role is not UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -80,5 +80,16 @@ def require_customer(user: CurrentUser) -> User:
     return user
 
 
+def require_technician(user: CurrentUser) -> User:
+    """Guard for the technician job endpoints."""
+    if user.role is not UserRole.TECHNICIAN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Technician access is required for this resource.",
+        )
+    return user
+
+
 AdminUser = Annotated[User, Depends(require_admin)]
 CustomerUser = Annotated[User, Depends(require_customer)]
+TechnicianUser = Annotated[User, Depends(require_technician)]

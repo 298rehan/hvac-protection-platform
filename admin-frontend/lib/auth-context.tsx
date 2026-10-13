@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * Admin session state.
+ * Staff session state (administrators and technicians).
  *
- * Sign-in goes through `POST /api/auth/admin/login`, which rejects CUSTOMER
- * accounts outright. On top of that, every admin endpoint re-checks the ADMIN
- * role server-side, so a customer token obtained elsewhere is useless here.
+ * Sign-in goes through `POST /api/auth/staff/login`, which rejects CUSTOMER
+ * accounts outright. On top of that, every endpoint re-checks the role
+ * server-side (admin-only actions, technician-only jobs), so the role check here
+ * only decides which area of the app to show.
  */
 
 import {
@@ -20,7 +21,16 @@ import {
 import { useRouter } from "next/navigation";
 
 import { ApiError, api, clearToken, getToken, setToken } from "@/lib/api";
-import type { TokenResponse, User } from "@/types";
+import type { TokenResponse, User, UserRole } from "@/types";
+
+export function isStaffRole(role: UserRole): boolean {
+  return role === "ADMIN" || role === "TECHNICIAN";
+}
+
+/** Where each staff role lands after signing in. */
+export function homeFor(role: UserRole): string {
+  return role === "TECHNICIAN" ? "/technician" : "/";
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -44,8 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const me = await api.get<User>("/api/auth/me");
-      // Defence in depth: never treat a non-admin token as an admin session.
-      if (me.role !== "ADMIN") {
+      // Defence in depth: never treat a customer token as a staff session.
+      if (!isStaffRole(me.role)) {
         clearToken();
         setUser(null);
       } else {
@@ -67,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<TokenResponse>(
-      "/api/auth/admin/login",
+      "/api/auth/staff/login",
       { email, password },
       { auth: false },
     );

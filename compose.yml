@@ -1,22 +1,51 @@
-version: '3.8'
+# Production stack on the EC2 host. MySQL runs on the host itself (reached via
+# host.docker.internal) and is not part of this file; Nginx on the host proxies
+# to the published ports below.
+#
+# Images are built and pushed by GitHub Actions; `docker compose pull` fetches
+# them. IMAGE_TAG pins a deploy to one commit (defaults to latest). `build:` is
+# kept so `docker compose build` still works for local development.
 
 services:
   backend:
+    image: ghcr.io/298rehan/hvac-protection-platform-backend:${IMAGE_TAG:-latest}
     build: ./backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    # Runtime configuration (JWT_SECRET_KEY, AWS_REGION, S3_BUCKET_NAME,
+    # DYNAMODB_ACTIVITY_TABLE, SMTP settings, ...) comes from these files on the
+    # server. Both are optional so a missing file never blocks startup; the
+    # deploy script checks that the required secrets are present.
+    env_file:
+      - path: ./.env
+        required: false
+      - path: ./backend/.env
+        required: false
     environment:
       DATABASE_URL: "${DATABASE_URL}"
       CORS_ORIGINS: "${CORS_ORIGINS}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     deploy:
       resources:
         limits:
           memory: 250M
 
   admin-frontend:
+    image: ghcr.io/298rehan/hvac-protection-platform-admin:${IMAGE_TAG:-latest}
     build: ./admin-frontend
+    restart: unless-stopped
     ports:
       - "3001:3000"
     depends_on:
@@ -27,7 +56,9 @@ services:
           memory: 300M
 
   customer-frontend:
+    image: ghcr.io/298rehan/hvac-protection-platform-customer:${IMAGE_TAG:-latest}
     build: ./customer-frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:

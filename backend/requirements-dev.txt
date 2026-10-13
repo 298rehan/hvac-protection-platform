@@ -1,0 +1,7 @@
+# Test-only dependencies. Not installed in the production image.
+-r requirements.txt
+
+pytest==9.1.1
+httpx==0.28.1
+# Mocks S3 and DynamoDB in-process, so tests never touch real AWS.
+moto[s3,dynamodb]==5.2.4

@@ -1,0 +1,43 @@
+# REFERENCE ONLY - the live Nginx config on the EC2 host is not in this repo.
+# Compare with /etc/nginx/sites-enabled/* before changing anything, then:
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# What the apps need from Nginx:
+#   * The customer app calls the API with relative /api/... paths, so the server
+#     that serves it must proxy /api/ to the backend on 127.0.0.1:8000.
+#   * The admin app (built without NEXT_PUBLIC_API_URL) calls http://54.206.86.229/api/...
+#     so port 80 on that address must also proxy /api/ to the backend.
+#   * Photo bytes go browser -> S3 directly, so no large client_max_body_size
+#     is needed for uploads.
+
+server {
+    listen 80;
+    server_name 54.206.86.229;   # or your customer domain
+
+    # Backend API (and FastAPI docs, optional)
+    location /api/ {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+        client_max_body_size 1m;
+    }
+
+    # Customer frontend
+    location / {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+    }
+}
+
+# Admin frontend - today it is reached directly on :3001. If you move it behind
+# Nginx (recommended, e.g. admin.example.com), proxy / to 127.0.0.1:3001 and
+# /api/ to 127.0.0.1:8000 exactly as above, add that origin to CORS_ORIGINS
+# and to Terraform's cors_allowed_origins.

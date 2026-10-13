@@ -4,10 +4,11 @@ from enum import Enum
 
 
 class UserRole(str, Enum):
-    """Only two roles exist in this system."""
+    """Account types. Technicians are staff created by an admin, never self-registered."""
 
     CUSTOMER = "CUSTOMER"
     ADMIN = "ADMIN"
+    TECHNICIAN = "TECHNICIAN"
 
 
 class PurchaseStatus(str, Enum):
@@ -32,3 +33,107 @@ ALLOWED_STATUS_TRANSITIONS: dict[PurchaseStatus, set[PurchaseStatus]] = {
     PurchaseStatus.CANCELLED: set(),
     PurchaseStatus.EXPIRED: set(),
 }
+
+
+# --- AC units ---------------------------------------------------------------
+
+
+class AcType(str, Enum):
+    CENTRAL_SPLIT = "CENTRAL_SPLIT"
+    DUCTLESS_MINI_SPLIT = "DUCTLESS_MINI_SPLIT"
+    HEAT_PUMP = "HEAT_PUMP"
+    PACKAGED = "PACKAGED"
+    WINDOW = "WINDOW"
+    PORTABLE = "PORTABLE"
+    OTHER = "OTHER"
+
+
+class ReportedCondition(str, Enum):
+    """The customer's own description - never treated as a verified assessment."""
+
+    GOOD = "GOOD"
+    FAIR = "FAIR"
+    POOR = "POOR"
+    NOT_WORKING = "NOT_WORKING"
+    UNKNOWN = "UNKNOWN"
+
+
+# --- Service requests -------------------------------------------------------
+
+
+class ServiceType(str, Enum):
+    ROUTINE_MAINTENANCE = "ROUTINE_MAINTENANCE"
+    NOT_COOLING = "NOT_COOLING"
+    NOT_HEATING = "NOT_HEATING"
+    WATER_LEAK = "WATER_LEAK"
+    STRANGE_NOISE = "STRANGE_NOISE"
+    VISIBLE_DAMAGE = "VISIBLE_DAMAGE"
+    OTHER = "OTHER"
+
+
+# Service types where photos help the review. The customer app asks for them;
+# they are still optional because photos cannot show internal faults.
+PHOTO_RECOMMENDED_SERVICE_TYPES = frozenset({ServiceType.WATER_LEAK, ServiceType.VISIBLE_DAMAGE})
+
+
+class ServiceRequestStatus(str, Enum):
+    SUBMITTED = "SUBMITTED"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    ASSIGNED = "ASSIGNED"
+    INSPECTION_IN_PROGRESS = "INSPECTION_IN_PROGRESS"
+    AWAITING_CUSTOMER_APPROVAL = "AWAITING_CUSTOMER_APPROVAL"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+TERMINAL_SERVICE_REQUEST_STATUSES = frozenset(
+    {ServiceRequestStatus.REJECTED, ServiceRequestStatus.COMPLETED, ServiceRequestStatus.CANCELLED}
+)
+
+_S = ServiceRequestStatus
+_C, _A, _T = UserRole.CUSTOMER, UserRole.ADMIN, UserRole.TECHNICIAN
+
+# Every permitted status change and the roles allowed to make it. Anything not
+# listed is rejected with a 409 by the service-request service, which also
+# applies the per-transition preconditions (ownership, assigned technician,
+# required notes and photos).
+SERVICE_REQUEST_TRANSITIONS: dict[tuple[ServiceRequestStatus, ServiceRequestStatus], frozenset[UserRole]] = {
+    (_S.SUBMITTED, _S.UNDER_REVIEW): frozenset({_A}),
+    (_S.SUBMITTED, _S.CANCELLED): frozenset({_C, _A}),
+    (_S.UNDER_REVIEW, _S.APPROVED): frozenset({_A}),
+    (_S.UNDER_REVIEW, _S.REJECTED): frozenset({_A}),
+    (_S.UNDER_REVIEW, _S.CANCELLED): frozenset({_C, _A}),
+    (_S.APPROVED, _S.ASSIGNED): frozenset({_A}),
+    (_S.APPROVED, _S.CANCELLED): frozenset({_C, _A}),
+    (_S.ASSIGNED, _S.INSPECTION_IN_PROGRESS): frozenset({_T}),
+    (_S.ASSIGNED, _S.CANCELLED): frozenset({_A}),
+    (_S.INSPECTION_IN_PROGRESS, _S.AWAITING_CUSTOMER_APPROVAL): frozenset({_T}),
+    (_S.INSPECTION_IN_PROGRESS, _S.IN_PROGRESS): frozenset({_T}),
+    (_S.INSPECTION_IN_PROGRESS, _S.COMPLETED): frozenset({_T}),
+    (_S.INSPECTION_IN_PROGRESS, _S.CANCELLED): frozenset({_A}),
+    (_S.AWAITING_CUSTOMER_APPROVAL, _S.IN_PROGRESS): frozenset({_C}),
+    (_S.AWAITING_CUSTOMER_APPROVAL, _S.CANCELLED): frozenset({_C, _A}),
+    (_S.IN_PROGRESS, _S.COMPLETED): frozenset({_T}),
+    (_S.IN_PROGRESS, _S.CANCELLED): frozenset({_A}),
+}
+
+
+# --- Photos -----------------------------------------------------------------
+
+
+class PhotoCategory(str, Enum):
+    INITIAL = "INITIAL"  # AC unit condition at registration
+    CUSTOMER = "CUSTOMER"  # attached by the customer to a service request
+    INSPECTION = "INSPECTION"
+    BEFORE = "BEFORE"
+    AFTER = "AFTER"
+
+
+class PhotoStatus(str, Enum):
+    """PENDING until the backend has verified the uploaded object in S3."""
+
+    PENDING = "PENDING"
+    UPLOADED = "UPLOADED"

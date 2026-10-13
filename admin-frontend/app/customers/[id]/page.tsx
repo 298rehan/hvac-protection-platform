@@ -13,6 +13,7 @@ import {
   PhoneIcon,
   ReceiptIcon,
   ShieldIcon,
+  WrenchIcon,
 } from "@/components/icons";
 import {
   Alert,
@@ -33,7 +34,9 @@ import {
   fetchCustomerCurrentPlan,
   fetchCustomerPurchases,
 } from "@/services/adminService";
-import type { Purchase, User } from "@/types";
+import { AC_TYPE_LABELS, CONDITION_LABELS } from "@/lib/service-format";
+import { fetchCustomerAcUnits } from "@/services/serviceRequestService";
+import type { AcUnit, Purchase, User } from "@/types";
 
 export default function CustomerDetailPage() {
   return (
@@ -251,7 +254,72 @@ function CustomerDetail() {
           )}
         </TBody>
       </TableCard>
+
+      <CustomerAcUnits customerId={customerId} />
     </div>
+  );
+}
+
+/** The customer's registered AC units (read-only for admins). */
+function CustomerAcUnits({ customerId }: { customerId: number }) {
+  const [units, setUnits] = useState<AcUnit[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCustomerAcUnits(customerId)
+      .then(setUnits)
+      .catch((err) => setError(errorMessage(err)));
+  }, [customerId]);
+
+  return (
+    <TableCard
+      header={
+        <CardHeader
+          title="AC units"
+          description={units ? `${units.length} registered unit${units.length === 1 ? "" : "s"}` : undefined}
+        />
+      }
+    >
+      <THead>
+        <Th>Unit</Th>
+        <Th>Type</Th>
+        <Th>Serial</Th>
+        <Th>Location</Th>
+        <Th>Condition</Th>
+        <Th>Plan</Th>
+        <Th className="text-right">Photos</Th>
+      </THead>
+      <TBody>
+        {error ? (
+          <TableEmpty colSpan={7} message={error} />
+        ) : units === null ? (
+          <TableEmpty colSpan={7} message="Loading AC units…" />
+        ) : units.length === 0 ? (
+          <TableEmpty colSpan={7} message="No AC units registered." icon={<WrenchIcon className="h-5 w-5" />} />
+        ) : (
+          units.map((unit) => (
+            <Tr key={unit.id}>
+              <Td className="font-medium text-slate-900">
+                {unit.brand} {unit.model_number}
+                {unit.has_open_request ? (
+                  <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                    Open request
+                  </span>
+                ) : null}
+              </Td>
+              <Td>{AC_TYPE_LABELS[unit.ac_type]}</Td>
+              <Td className="text-slate-500">{unit.serial_number ?? "—"}</Td>
+              <Td className="text-slate-500">
+                {unit.city}, {unit.state}
+              </Td>
+              <Td>{CONDITION_LABELS[unit.reported_condition]}</Td>
+              <Td>{unit.plan_name ?? "—"}</Td>
+              <Td className="text-right tabular-nums">{unit.photos.length}</Td>
+            </Tr>
+          ))
+        )}
+      </TBody>
+    </TableCard>
   );
 }
 

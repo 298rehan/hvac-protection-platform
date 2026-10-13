@@ -100,7 +100,7 @@ def login(payload: LoginRequest, db: DbSession):
     if user.role is not UserRole.CUSTOMER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator accounts must sign in through the admin portal.",
+            detail="Staff accounts must sign in through the staff portal.",
         )
     return _issue_token(user)
 
@@ -122,6 +122,28 @@ def admin_login(payload: LoginRequest, db: DbSession):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This portal is for administrator accounts only.",
+        )
+    return _issue_token(user)
+
+
+@router.post("/staff/login", response_model=TokenResponse, summary="Staff sign in (admin or technician)")
+def staff_login(payload: LoginRequest, db: DbSession):
+    """Entry point for the staff portal. The returned user's role tells the
+    admin app which area (admin or technician) to show."""
+    user = _find_by_email(db, payload.email)
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="This account has been deactivated."
+        )
+    if user.role not in (UserRole.ADMIN, UserRole.TECHNICIAN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This portal is for staff accounts only.",
         )
     return _issue_token(user)
 

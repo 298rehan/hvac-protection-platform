@@ -2,51 +2,118 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 
 import {
   ChevronRightIcon,
+  ClockIcon,
   CloseIcon,
   GridIcon,
   LayersIcon,
   LogoutIcon,
   MenuIcon,
   ReceiptIcon,
+  ShieldIcon,
   UsersIcon,
+  WrenchIcon,
 } from "@/components/icons";
 import { Avatar, PageLoader } from "@/components/ui";
-import { useAuth } from "@/lib/auth-context";
+import { homeFor, useAuth } from "@/lib/auth-context";
 import { cx } from "@/lib/format";
+import type { UserRole } from "@/types";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: GridIcon },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  /** Custom active-state rule; defaults to a prefix match. */
+  match?: (pathname: string) => boolean;
+}
+
+const ADMIN_NAV: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: GridIcon, match: (p) => p === "/" },
+  { href: "/service-requests", label: "Service Requests", icon: WrenchIcon },
   { href: "/customers", label: "Customers", icon: UsersIcon },
+  { href: "/technicians", label: "Technicians", icon: ShieldIcon },
   { href: "/plans", label: "Plans", icon: LayersIcon },
   { href: "/purchases", label: "Purchases", icon: ReceiptIcon },
 ];
 
-function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+const TECHNICIAN_NAV: NavItem[] = [
+  {
+    href: "/technician",
+    label: "My jobs",
+    icon: WrenchIcon,
+    match: (p) => p === "/technician" || p.startsWith("/technician/jobs"),
+  },
+  { href: "/technician/history", label: "Job history", icon: ClockIcon },
+];
+
+function isActive(pathname: string, item: NavItem) {
+  return item.match ? item.match(pathname) : pathname.startsWith(item.href);
 }
 
 /**
  * Chrome for every authenticated admin page.
  *
  * The redirect below is a UX convenience only - the API independently requires
- * a valid ADMIN token on every endpoint this panel calls.
+ * a valid ADMIN token on every admin endpoint this panel calls.
  */
 export function AdminShell({ children }: { children: ReactNode }) {
+  return (
+    <StaffShell role="ADMIN" nav={ADMIN_NAV} panelLabel="Admin Panel" rootLabel="Admin">
+      {children}
+    </StaffShell>
+  );
+}
+
+/**
+ * Chrome for the technician area. Technicians only ever see their own assigned
+ * jobs; the API enforces that regardless of what this shell renders.
+ */
+export function TechnicianShell({ children }: { children: ReactNode }) {
+  return (
+    <StaffShell
+      role="TECHNICIAN"
+      nav={TECHNICIAN_NAV}
+      panelLabel="Technician"
+      rootLabel="Technician"
+    >
+      {children}
+    </StaffShell>
+  );
+}
+
+function StaffShell({
+  role,
+  nav,
+  panelLabel,
+  rootLabel,
+  children,
+}: {
+  role: UserRole;
+  nav: NavItem[];
+  panelLabel: string;
+  rootLabel: string;
+  children: ReactNode;
+}) {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const home = homeFor(role);
 
   // The drawer remembers which page it was opened on, so navigating closes it.
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const sidebarOpen = drawerPath === pathname;
 
+  const wrongRole = Boolean(user && user.role !== role);
+
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    if (loading) return;
+    if (!user) router.replace("/login");
+    // Send each staff role to its own area.
+    else if (user.role !== role) router.replace(homeFor(user.role));
+  }, [loading, user, role, router]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -57,7 +124,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [sidebarOpen]);
 
-  if (loading || !user) {
+  if (loading || !user || wrongRole) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <PageLoader label="Checking your session" />
@@ -65,7 +132,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const section = NAV.find((item) => isActive(pathname, item.href));
+  const section = nav.find((item) => isActive(pathname, item));
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -86,7 +153,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         )}
       >
         <div className="flex h-16 items-center justify-between gap-2.5 border-b border-white/10 px-5">
-          <Link href="/" className="flex items-center gap-2.5">
+          <Link href={home} className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white shadow-sm ring-1 ring-white/10">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-5 w-5" aria-hidden>
                 <path strokeLinecap="round" d="M12 3v18M3 12h18M6.3 6.3l11.4 11.4M17.7 6.3 6.3 17.7" />
@@ -96,7 +163,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <span className="flex flex-col leading-none">
               <span className="text-sm font-bold text-white">Summit Air</span>
               <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-300">
-                Admin Panel
+                {panelLabel}
               </span>
             </span>
           </Link>
@@ -110,13 +177,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-5" aria-label="Admin">
+        <nav className="flex-1 overflow-y-auto px-3 py-5" aria-label={panelLabel}>
           <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-400">
-            Management
+            {role === "TECHNICIAN" ? "Field work" : "Management"}
           </p>
           <ul className="space-y-0.5">
-            {NAV.map((item) => {
-              const active = isActive(pathname, item.href);
+            {nav.map((item) => {
+              const active = isActive(pathname, item);
               const Icon = item.icon;
               return (
                 <li key={item.href}>
@@ -190,8 +257,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <MenuIcon />
           </button>
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
-            <Link href="/" className="font-medium text-slate-500 hover:text-slate-900">
-              Admin
+            <Link href={home} className="font-medium text-slate-500 hover:text-slate-900">
+              {rootLabel}
             </Link>
             {section ? (
               <>

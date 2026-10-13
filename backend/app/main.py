@@ -5,8 +5,10 @@ Interactive docs:  http://localhost:8000/docs
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +16,19 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
-from app.routers import auth, customers, dashboard, plans, purchases, regions
+from app.routers import (
+    ac_units,
+    auth,
+    customers,
+    dashboard,
+    photos,
+    plans,
+    purchases,
+    regions,
+    service_requests,
+    technicians,
+)
+from app.services.activity import MaintenanceWorker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,18 +41,49 @@ REST API for a regional HVAC protection-plan business.
 
 * **Customers** register with a service address; their US state decides which
   plans they are shown and what those plans cost.
-* **Admins** manage plans, regional pricing, and the approval of enrollments.
+* **Admins** manage plans, regional pricing, the approval of enrollments, and
+  service requests - review, approval and technician assignment.
+* **Customers** register AC units under their plan and submit service requests
+  with photos; **technicians** record inspections and repairs.
 
 Authenticate with `POST /api/auth/login` (customers) or
-`POST /api/auth/admin/login` (admins), then click **Authorize** and paste the
-`access_token`.
+`POST /api/auth/staff/login` (admins and technicians), then click **Authorize**
+and paste the `access_token`.
 
 > This is a portfolio/demo system. Checkout is simulated - no payment gateway is
 > involved and no card details are ever collected.
 """
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Run the outbox / upload-cleanup worker for the life of the process."""
+    # Loud, secret-free warnings so a misconfigured server shows up in the logs
+    # instead of failing silently.
+    if settings.jwt_secret_key == "insecure-development-secret-change-me":
+        logger.critical(
+            "JWT_SECRET_KEY is not set - tokens are signed with the public default key. "
+            "Set JWT_SECRET_KEY in the server's .env."
+        )
+    if not settings.s3_bucket_name:
+        logger.warning("S3_BUCKET_NAME is not set - photo uploads are disabled (503).")
+    if not settings.dynamodb_activity_table:
+        logger.warning(
+            "DYNAMODB_ACTIVITY_TABLE is not set - activity events stay in the MySQL outbox."
+        )
+    worker = None
+    if settings.activity_worker_enabled:
+        worker = MaintenanceWorker(settings.activity_worker_interval_seconds)
+        worker.start()
+    try:
+        yield
+    finally:
+        if worker is not None:
+            worker.stop()
+
+
 app = FastAPI(
     title=settings.app_name,
+    lifespan=lifespan,
     description=DESCRIPTION,
     version="1.0.0",
     docs_url="/docs",
@@ -50,6 +95,10 @@ app = FastAPI(
         {"name": "Customers", "description": "Customer profile and the admin directory."},
         {"name": "Dashboard", "description": "Aggregated statistics for both dashboards."},
         {"name": "Regions", "description": "US state reference data."},
+        {"name": "AC Units", "description": "Customer AC unit registration."},
+        {"name": "Service Requests", "description": "Repair and maintenance job lifecycle."},
+        {"name": "Photos", "description": "Private photo uploads via presigned S3 URLs."},
+        {"name": "Technicians", "description": "Technician accounts (admin)."},
     ],
 )
 
@@ -69,6 +118,10 @@ app.include_router(plans.router)
 app.include_router(purchases.router)
 app.include_router(dashboard.router)
 app.include_router(customers.router)
+app.include_router(ac_units.router)
+app.include_router(service_requests.router)
+app.include_router(photos.router)
+app.include_router(technicians.router)
 
 
 # --- Error handling -------------------------------------------------------
@@ -97,8 +150,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        # jsonable_encoder: custom validators put the raw ValueError in
+        # `ctx`, which the JSON encoder cannot serialise (that was a 500).
         content={"detail": "; ".join(
-            problems) or "Invalid request.", "errors": exc.errors()},
+            problems) or "Invalid request.", "errors": jsonable_encoder(exc.errors())},
     )
 
 

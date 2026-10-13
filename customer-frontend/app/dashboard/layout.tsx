@@ -3,13 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { HomeIcon, ReceiptIcon, ShieldIcon, UserIcon } from "@/components/icons";
+import {
+  ClipboardIcon,
+  HomeIcon,
+  ReceiptIcon,
+  ShieldIcon,
+  SnowflakeIcon,
+  UserIcon,
+} from "@/components/icons";
 import { RequireAuth } from "@/components/require-auth";
 import { cx } from "@/lib/format";
 
 const TABS = [
   { href: "/dashboard", label: "Overview", icon: HomeIcon },
   { href: "/dashboard/my-plan", label: "My Plan", icon: ShieldIcon },
+  { href: "/dashboard/ac-units", label: "AC Units", icon: SnowflakeIcon },
+  { href: "/dashboard/service-requests", label: "Service Requests", icon: ClipboardIcon },
   { href: "/dashboard/purchases", label: "My Purchases", icon: ReceiptIcon },
   { href: "/dashboard/profile", label: "Profile", icon: UserIcon },
 ];
@@ -27,7 +36,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               aria-label="Dashboard"
             >
               {TABS.map((tab) => {
-                const active = pathname === tab.href;
+                // Nested pages (e.g. /dashboard/ac-units/5) keep their section's tab active.
+                const active =
+                  tab.href === "/dashboard"
+                    ? pathname === tab.href
+                    : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
                 return (
                   <Link
                     key={tab.href}

@@ -129,6 +129,7 @@ function PlanDetail() {
               {plan.base_annual_price ? formatMoney(plan.base_annual_price) : "Not offered"}
             </DetailRow>
             <DetailRow label="Display order">{plan.display_order}</DetailRow>
+            <DetailRow label="AC units covered">{plan.max_ac_units}</DetailRow>
             <DetailRow label="Created">{formatDate(plan.created_at)}</DetailRow>
             <DetailRow label="Last updated">{formatDate(plan.updated_at)}</DetailRow>
           </dl>

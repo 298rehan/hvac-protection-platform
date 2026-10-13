@@ -44,6 +44,8 @@ export interface PublicPlan {
   description: string;
   features: string[];
   display_order: number;
+  /** How many AC units one purchase of this plan covers. */
+  max_ac_units: number;
   state_code: string;
   state_name: string;
   monthly_price: string;
@@ -118,4 +120,156 @@ export interface ProfileUpdatePayload {
   city?: string;
   state?: string;
   zip_code?: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Maintenance workflow: AC units, photos, service requests.
+ * Mirrors backend/app/schemas/{ac_unit,photo,service_request}.py.
+ * ------------------------------------------------------------------ */
+
+export type AcType =
+  | "CENTRAL_SPLIT"
+  | "DUCTLESS_MINI_SPLIT"
+  | "HEAT_PUMP"
+  | "PACKAGED"
+  | "WINDOW"
+  | "PORTABLE"
+  | "OTHER";
+
+export type ReportedCondition = "GOOD" | "FAIR" | "POOR" | "NOT_WORKING" | "UNKNOWN";
+
+export type ServiceType =
+  | "ROUTINE_MAINTENANCE"
+  | "NOT_COOLING"
+  | "NOT_HEATING"
+  | "WATER_LEAK"
+  | "STRANGE_NOISE"
+  | "VISIBLE_DAMAGE"
+  | "OTHER";
+
+export type ServiceRequestStatus =
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "ASSIGNED"
+  | "INSPECTION_IN_PROGRESS"
+  | "AWAITING_CUSTOMER_APPROVAL"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED";
+
+export type PhotoCategory = "INITIAL" | "CUSTOMER" | "INSPECTION" | "BEFORE" | "AFTER";
+
+export type PhotoStatus = "PENDING" | "UPLOADED";
+
+export type PhotoContentType = "image/jpeg" | "image/png" | "image/webp";
+
+export interface Photo {
+  id: number;
+  category: PhotoCategory;
+  status: PhotoStatus;
+  original_filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+  confirmed_at: string | null;
+  /** Short-lived presigned view URL; only set for verified photos. */
+  url: string | null;
+}
+
+export interface PhotoUploadResponse {
+  photo_id: number;
+  upload: { url: string; fields: Record<string, string> };
+  expires_in: number;
+  max_bytes: number;
+}
+
+export interface AcUnitBrief {
+  id: number;
+  brand: string;
+  model_number: string;
+  serial_number: string | null;
+  ac_type: AcType;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  installation_date: string | null;
+  reported_condition: ReportedCondition;
+}
+
+export interface AcUnit extends AcUnitBrief {
+  customer_id: number;
+  purchase_id: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  plan_name: string | null;
+  has_open_request: boolean;
+  photos: Photo[];
+}
+
+export interface AcUnitPayload {
+  brand: string;
+  model_number: string;
+  serial_number: string | null;
+  ac_type: AcType;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  installation_date: string | null;
+  reported_condition: ReportedCondition;
+  notes: string | null;
+}
+
+export interface TechnicianBrief {
+  id: number;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+}
+
+export interface ServiceRequestListItem {
+  id: number;
+  status: ServiceRequestStatus;
+  service_type: ServiceType;
+  created_at: string;
+  updated_at: string;
+  ac_unit: AcUnitBrief;
+  technician: TechnicianBrief | null;
+}
+
+export interface ServiceRequestDetail extends ServiceRequestListItem {
+  description: string;
+  status_reason: string | null;
+  inspection_findings: string | null;
+  proposed_work: string | null;
+  work_performed: string | null;
+  parts_used: string | null;
+  customer_decision_note: string | null;
+  reviewed_at: string | null;
+  decided_at: string | null;
+  assigned_at: string | null;
+  inspection_started_at: string | null;
+  work_started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  plan: { purchase_id: number; plan_name: string };
+  photo_recommended: boolean;
+  photos: Photo[];
+  ac_unit_photos: Photo[];
+  allowed_upload_categories: PhotoCategory[];
+}
+
+/** Customer-safe activity event (staff identifiers are removed by the API). */
+export interface ActivityEvent {
+  event_id: string;
+  event_type: string;
+  event_timestamp: string;
+  actor_role: string;
+  description: string;
+  previous_status: string | null;
+  new_status: string | null;
 }

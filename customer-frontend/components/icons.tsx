@@ -127,3 +127,17 @@ export const ClockIcon = icon(
     <path d="M12 7.5V12l3 2" />
   </>,
 );
+
+export const SnowflakeIcon = icon(
+  <>
+    <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" />
+    <path d="m9.5 4.5 2.5 2 2.5-2M9.5 19.5l2.5-2 2.5 2" />
+  </>,
+);
+
+export const ClipboardIcon = icon(
+  <>
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 4.5V3.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M9 11h6M9 15h4" />
+  </>,
+);

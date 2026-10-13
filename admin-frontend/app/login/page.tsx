@@ -7,9 +7,9 @@ import { Field, Input } from "@/components/form";
 import { ShieldIcon } from "@/components/icons";
 import { Alert, Button } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { homeFor, useAuth } from "@/lib/auth-context";
 
-export default function AdminLoginPage() {
+export default function StaffLoginPage() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
 
@@ -19,7 +19,7 @@ export default function AdminLoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/");
+    if (!loading && user) router.replace(homeFor(user.role));
   }, [loading, user, router]);
 
   async function handleSubmit(event: FormEvent) {
@@ -27,8 +27,8 @@ export default function AdminLoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
-      router.replace("/");
+      const signedIn = await login(email, password);
+      router.replace(homeFor(signedIn.role));
     } catch (err) {
       setError(errorMessage(err));
       setSubmitting(false);
@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
           <span className="flex flex-col leading-none">
             <span className="text-lg font-bold text-white">Summit Air</span>
             <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-300">
-              Admin Panel
+              Staff Portal
             </span>
           </span>
         </div>
@@ -64,11 +64,11 @@ export default function AdminLoginPage() {
             </span>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">
-                Administrator sign in
+                Staff sign in
               </h1>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                This portal is separate from the customer site. Customer accounts cannot
-                sign in here.
+                For administrators and technicians. This portal is separate from the
+                customer site, and customer accounts cannot sign in here.
               </p>
             </div>
           </div>

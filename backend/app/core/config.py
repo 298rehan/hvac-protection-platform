@@ -48,6 +48,27 @@ class Settings(BaseSettings):
     email_from_name: str = "Summit Air Protection Plans"
     admin_notification_email: str = "admin@hvacdemo.com"
 
+    # --- AWS ---------------------------------------------------------------
+    # Credentials are never configured here. boto3 finds them itself: the EC2
+    # instance role in production, or AWS_PROFILE / ~/.aws locally.
+    aws_region: str = "ap-southeast-2"
+    # Empty means "not configured": photo endpoints return 503 and activity
+    # events stay in the MySQL outbox until a table is configured.
+    s3_bucket_name: str = ""
+    dynamodb_activity_table: str = ""
+
+    # --- Photo uploads -----------------------------------------------------
+    upload_max_bytes: int = 10 * 1024 * 1024
+    upload_url_expiry_seconds: int = 300
+    download_url_expiry_seconds: int = 300
+    max_photos_per_category: int = 10
+    # Unconfirmed uploads older than this are removed (row + S3 object).
+    pending_upload_ttl_minutes: int = 60
+
+    # --- Activity outbox worker -------------------------------------------
+    activity_worker_enabled: bool = True
+    activity_worker_interval_seconds: int = 30
+
     @field_validator("email_mode")
     @classmethod
     def _validate_email_mode(cls, value: str) -> str:

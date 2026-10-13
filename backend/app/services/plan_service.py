@@ -76,6 +76,7 @@ def create_plan(db: Session, payload: PlanCreate) -> Plan:
         base_annual_price=payload.base_annual_price,
         is_active=payload.is_active,
         display_order=payload.display_order,
+        max_ac_units=payload.max_ac_units,
     )
     _replace_regions(db, plan, payload.regions)
     db.add(plan)
@@ -104,7 +105,7 @@ def update_plan(db: Session, plan: Plan, payload: PlanUpdate) -> Plan:
         plan.name = new_name
 
     for field in ("description", "features", "base_monthly_price", "base_annual_price",
-                  "is_active", "display_order"):
+                  "is_active", "display_order", "max_ac_units"):
         if field in data and data[field] is not None:
             setattr(plan, field, data[field])
 
@@ -160,6 +161,7 @@ def to_public(plan: Plan, state_code: str) -> PlanPublicOut:
         description=plan.description,
         features=plan.features or [],
         display_order=plan.display_order,
+        max_ac_units=plan.max_ac_units,
         state_code=state_code.upper(),
         state_name=state_name(state_code),
         monthly_price=monthly,

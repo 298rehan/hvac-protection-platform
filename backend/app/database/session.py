@@ -10,17 +10,17 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 
-engine = create_engine(
-    settings.database_url,
-    # MySQL drops idle connections after `wait_timeout` (8 hours by default) and
-    # the pooled connection would otherwise come back dead. pool_pre_ping checks
-    # liveness before handing a connection out; pool_recycle retires connections
-    # well before the server would close them.
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=5,
-    max_overflow=10,
+# MySQL drops idle connections after `wait_timeout` (8 hours by default) and
+# the pooled connection would otherwise come back dead. pool_pre_ping checks
+# liveness before handing a connection out; pool_recycle retires connections
+# well before the server would close them. SQLite (used only by the test suite)
+# has its own pool that rejects these sizing options.
+_pool_options = (
+    {}
+    if settings.database_url.startswith("sqlite")
+    else {"pool_recycle": 3600, "pool_size": 5, "max_overflow": 10}
 )
+engine = create_engine(settings.database_url, pool_pre_ping=True, **_pool_options)
 
 
 @event.listens_for(engine, "connect")

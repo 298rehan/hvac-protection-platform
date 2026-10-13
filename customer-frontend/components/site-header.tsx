@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   ChevronDownIcon,
+  ClipboardIcon,
   CloseIcon,
   HomeIcon,
   LogoutIcon,
   MenuIcon,
   ReceiptIcon,
   ShieldIcon,
+  SnowflakeIcon,
   UserIcon,
 } from "@/components/icons";
 import { Logo } from "@/components/logo";
@@ -27,6 +29,8 @@ const PUBLIC_LINKS = [
 const ACCOUNT_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: HomeIcon },
   { href: "/dashboard/my-plan", label: "My Plan", icon: ShieldIcon },
+  { href: "/dashboard/ac-units", label: "My AC Units", icon: SnowflakeIcon },
+  { href: "/dashboard/service-requests", label: "Service Requests", icon: ClipboardIcon },
   { href: "/dashboard/purchases", label: "My Purchases", icon: ReceiptIcon },
   { href: "/dashboard/profile", label: "Profile", icon: UserIcon },
 ];

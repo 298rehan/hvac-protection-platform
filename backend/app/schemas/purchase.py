@@ -30,6 +30,7 @@ class PurchasePlanRef(ORMModel):
     slug: str
     description: str
     features: list[str]
+    max_ac_units: int = 1
 
 
 class PurchaseStatusHistoryOut(ORMModel):

@@ -14,6 +14,7 @@ import {
   ReceiptIcon,
   ShieldIcon,
   UsersIcon,
+  WrenchIcon,
 } from "@/components/icons";
 import {
   Alert,
@@ -29,6 +30,7 @@ import {
 import { errorMessage } from "@/lib/api";
 import { cycleSuffix, formatDate, formatMoney } from "@/lib/format";
 import { fetchDashboard } from "@/services/adminService";
+import { fetchServiceRequests } from "@/services/serviceRequestService";
 import type { AdminDashboard } from "@/types";
 
 export default function AdminDashboardPage() {
@@ -36,6 +38,39 @@ export default function AdminDashboardPage() {
     <AdminShell>
       <DashboardContent />
     </AdminShell>
+  );
+}
+
+/** Shown when customers have submitted service requests nobody has picked up. */
+function NewServiceRequestsBanner() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    fetchServiceRequests({ status: "SUBMITTED" })
+      .then((list) => setCount(list.length))
+      .catch(() => setCount(0));
+  }, []);
+
+  if (count === 0) return null;
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+      <p className="flex items-center gap-3 text-sm text-sky-900">
+        <WrenchIcon className="h-5 w-5 text-sky-500" />
+        <span>
+          <strong className="font-semibold">
+            {count} new service request{count === 1 ? "" : "s"}
+          </strong>{" "}
+          waiting for review.
+        </span>
+      </p>
+      <Link
+        href="/service-requests"
+        className="inline-flex items-center gap-1 pl-8 text-sm font-semibold text-sky-900 hover:text-sky-950 sm:pl-0"
+      >
+        Review requests
+        <ArrowRightIcon className="h-4 w-4" />
+      </Link>
+    </div>
   );
 }
 
@@ -91,6 +126,8 @@ function DashboardContent() {
           </Link>
         </div>
       ) : null}
+
+      <NewServiceRequestsBanner />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard

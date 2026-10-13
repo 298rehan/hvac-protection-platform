@@ -42,6 +42,10 @@ class Plan(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # How many AC units a customer may register against one purchase of this plan.
+    max_ac_units: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,

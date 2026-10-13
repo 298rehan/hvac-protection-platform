@@ -24,3 +24,24 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 .env
+
+# --- Terraform ---------------------------------------------------------
+# State and plans can contain resource details; never commit them.
+# (.terraform.lock.hcl IS committed so provider versions stay pinned.)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+terraform/backend.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

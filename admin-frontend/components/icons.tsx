@@ -156,3 +156,33 @@ export const MapPinIcon = icon(
     <circle cx="12" cy="10" r="2.3" />
   </>,
 );
+
+export const WrenchIcon = icon(
+  <path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L4 16.7V20h3.3l5.3-5.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4 2.6-2.6Z" />,
+);
+
+export const CameraIcon = icon(
+  <>
+    <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.5-2h5.6l1.5 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9Z" />
+    <circle cx="12" cy="13" r="3.2" />
+  </>,
+);
+
+export const UploadIcon = icon(
+  <path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15" />,
+);
+
+export const ImageIcon = icon(
+  <>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="m20.5 16-4.5-4.5L6 19.5" />
+  </>,
+);
+
+export const UserPlusIcon = icon(
+  <>
+    <circle cx="10" cy="8" r="3.2" />
+    <path d="M4.5 19.5a5.5 5.5 0 0 1 11 0M18 8.5v5M15.5 11h5" />
+  </>,
+);

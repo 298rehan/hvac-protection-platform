@@ -67,6 +67,7 @@ class PlanCreate(BaseModel):
     )
     is_active: bool = True
     display_order: int = 0
+    max_ac_units: int = Field(default=1, ge=1, le=20)
     regions: list[PlanRegionIn] = Field(default_factory=list)
 
     @field_validator("features")
@@ -96,6 +97,7 @@ class PlanUpdate(BaseModel):
     base_annual_price: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
     is_active: bool | None = None
     display_order: int | None = None
+    max_ac_units: int | None = Field(default=None, ge=1, le=20)
     # When present, this list fully replaces the plan's regional pricing.
     regions: list[PlanRegionIn] | None = None
 
@@ -129,6 +131,7 @@ class PlanOut(ORMModel):
     base_annual_price: Decimal | None
     is_active: bool
     display_order: int
+    max_ac_units: int
     created_at: datetime
     updated_at: datetime
     regions: list[PlanRegionOut] = Field(default_factory=list)
@@ -143,6 +146,7 @@ class PlanPublicOut(ORMModel):
     description: str
     features: list[str]
     display_order: int
+    max_ac_units: int = 1
     state_code: str
     state_name: str
     monthly_price: Decimal

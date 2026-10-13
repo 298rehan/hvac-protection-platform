@@ -20,12 +20,16 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.database.session import SessionLocal, engine
 from app.models import (
+    AcUnit,
+    ActivityOutbox,
     BillingCycle,
+    Photo,
     Plan,
     PlanRegion,
     Purchase,
     PurchaseStatus,
     PurchaseStatusHistory,
+    ServiceRequest,
     User,
     UserRole,
 )
@@ -36,6 +40,8 @@ from app.services.plan_service import slugify
 # --------------------------------------------------------------------------
 ADMIN_EMAIL = "admin@hvacdemo.com"
 ADMIN_PASSWORD = "Admin123!"
+TECHNICIAN_EMAIL = "tech@hvacdemo.com"
+TECHNICIAN_PASSWORD = "Tech123!"
 CUSTOMER_PASSWORD = "Customer123!"
 
 # --------------------------------------------------------------------------
@@ -143,7 +149,15 @@ CUSTOMERS = [
 
 
 def wipe(db: Session) -> None:
-    """Delete all demo data. Child rows go first to respect foreign keys."""
+    """Delete all demo data. Child rows go first to respect foreign keys.
+
+    Database rows only: photo objects already uploaded to S3 are not removed
+    (they expire under the bucket's lifecycle rules).
+    """
+    db.execute(delete(ActivityOutbox))
+    db.execute(delete(Photo))
+    db.execute(delete(ServiceRequest))
+    db.execute(delete(AcUnit))
     db.execute(delete(PurchaseStatusHistory))
     db.execute(delete(Purchase))
     db.execute(delete(PlanRegion))
@@ -168,6 +182,16 @@ def seed_users(db: Session) -> tuple[User, list[User]]:
     )
     db.add(admin)
 
+    technician = User(
+        first_name="Marcus",
+        last_name="Reyes",
+        email=TECHNICIAN_EMAIL,
+        password_hash=hash_password(TECHNICIAN_PASSWORD),
+        role=UserRole.TECHNICIAN,
+        phone="(407) 555-0142",
+    )
+    db.add(technician)
+
     customers = []
     for spec in CUSTOMERS:
         customer = User(
@@ -181,7 +205,7 @@ def seed_users(db: Session) -> tuple[User, list[User]]:
     db.commit()
     for user in (admin, *customers):
         db.refresh(user)
-    print(f"  Created 1 admin and {len(customers)} customers.")
+    print(f"  Created 1 admin, 1 technician and {len(customers)} customers.")
     return admin, customers
 
 
@@ -348,6 +372,7 @@ def main() -> int:
         seed_purchases(db, admin, customers, plans)
 
     lines = [f"  Admin     {ADMIN_EMAIL} / {ADMIN_PASSWORD}"]
+    lines.append(f"  Tech      {TECHNICIAN_EMAIL} / {TECHNICIAN_PASSWORD}")
     lines += [f"  Customer  {c['email']} / {CUSTOMER_PASSWORD}" for c in CUSTOMERS]
     print("\nDone. Demo credentials (local development only):")
     print("\n".join(lines))

@@ -1,0 +1,9 @@
+# Copy to backend.hcl (git-ignored), fill in the bucket created by ./bootstrap,
+# then:  terraform init -backend-config=backend.hcl
+
+bucket       = "hvac-tfstate-594775505885-ap-southeast-2"
+key          = "hvac/prod/terraform.tfstate"
+region       = "ap-southeast-2"
+profile      = "hvac-dev"
+encrypt      = true
+use_lockfile = true # S3-native locking (Terraform >= 1.10); no DynamoDB lock table needed

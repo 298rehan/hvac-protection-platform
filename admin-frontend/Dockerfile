@@ -14,7 +14,12 @@ COPY . .
 
 # Restrict Node memory during compilation to prevent EC2 crashes
 ENV NODE_OPTIONS="--max-old-space-size=400"
-RUN npm run build
+# Optional public API base URL, baked in at build time (Next.js NEXT_PUBLIC_*).
+# When not supplied the app keeps its built-in default. An empty value would
+# override that default, so the variable is removed in that case.
+ARG NEXT_PUBLIC_API_URL
+RUN if [ -n "$NEXT_PUBLIC_API_URL" ]; then npm run build; \
+    else env -u NEXT_PUBLIC_API_URL npm run build; fi
 
 # Clean out development modules before moving to production stage
 RUN npm prune --production

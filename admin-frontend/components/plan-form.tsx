@@ -18,6 +18,7 @@ interface FormState {
   base_annual_price: string;
   is_active: boolean;
   display_order: string;
+  max_ac_units: string;
   regions: PlanRegionInput[];
 }
 
@@ -31,6 +32,7 @@ function initialState(plan?: Plan): FormState {
       base_annual_price: "",
       is_active: true,
       display_order: "0",
+      max_ac_units: "1",
       regions: [],
     };
   }
@@ -42,6 +44,7 @@ function initialState(plan?: Plan): FormState {
     base_annual_price: plan.base_annual_price ?? "",
     is_active: plan.is_active,
     display_order: String(plan.display_order),
+    max_ac_units: String(plan.max_ac_units ?? 1),
     regions: plan.regions.map((region) => ({
       state_code: region.state_code,
       monthly_price: region.monthly_price,
@@ -141,6 +144,12 @@ export function PlanForm({ plan }: { plan?: Plan }) {
       return;
     }
 
+    const maxUnits = Number(form.max_ac_units);
+    if (!Number.isInteger(maxUnits) || maxUnits < 1 || maxUnits > 20) {
+      setError("AC units per plan must be a whole number from 1 to 20.");
+      return;
+    }
+
     const payload: PlanPayload = {
       name: form.name.trim(),
       description: form.description.trim(),
@@ -149,6 +158,7 @@ export function PlanForm({ plan }: { plan?: Plan }) {
       base_annual_price: form.base_annual_price.trim() || null,
       is_active: form.is_active,
       display_order: Number(form.display_order) || 0,
+      max_ac_units: maxUnits,
       regions: form.regions.map((region) => ({
         state_code: region.state_code,
         monthly_price: region.monthly_price,
@@ -240,6 +250,22 @@ export function PlanForm({ plan }: { plan?: Plan }) {
               inputMode="numeric"
               value={form.display_order}
               onChange={(e) => set("display_order", e.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="AC units covered"
+            htmlFor="max_ac_units"
+            hint="How many AC units a customer may register under one purchase (1-20)."
+          >
+            <Input
+              id="max_ac_units"
+              type="number"
+              min={1}
+              max={20}
+              inputMode="numeric"
+              value={form.max_ac_units}
+              onChange={(e) => set("max_ac_units", e.target.value)}
             />
           </Field>
 

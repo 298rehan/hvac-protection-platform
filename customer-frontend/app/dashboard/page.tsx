@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import {
   ArrowRightIcon,
   CalendarIcon,
+  ClipboardIcon,
   MapPinIcon,
   ReceiptIcon,
   ShieldIcon,
+  SnowflakeIcon,
 } from "@/components/icons";
 import {
   Alert,
@@ -186,6 +188,21 @@ export default function DashboardPage() {
         />
       )}
 
+      <div className="grid gap-4 md:grid-cols-2">
+        <QuickLink
+          href="/dashboard/ac-units"
+          icon={<SnowflakeIcon />}
+          title="My AC units"
+          body="Register the equipment your plan covers and add condition photos."
+        />
+        <QuickLink
+          href="/dashboard/service-requests"
+          icon={<ClipboardIcon />}
+          title="Service requests"
+          body="Request a repair or maintenance visit and follow its progress."
+        />
+      </div>
+
       <Card className="overflow-hidden">
         <CardHeader
           title="Recent purchases"
@@ -316,5 +333,34 @@ function DashboardSkeleton() {
       <Skeleton className="h-64 rounded-xl" />
       <Skeleton className="h-56 rounded-xl" />
     </div>
+  );
+}
+
+function QuickLink({
+  href,
+  icon,
+  title,
+  body,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <Link href={href} className="block rounded-xl">
+      <Card className="hover-lift spotlight flex h-full items-start gap-4 p-5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+            {title}
+            <ArrowRightIcon className="h-4 w-4 text-slate-400" />
+          </p>
+          <p className="mt-1 text-sm text-slate-500">{body}</p>
+        </div>
+      </Card>
+    </Link>
   );
 }
