@@ -151,3 +151,42 @@ def test_no_credentials_or_config_in_responses(app):
     _, body = call(app, VALID)
     text = json.dumps(body)
     assert TABLE not in text and SENDER not in text
+
+
+def test_email_has_html_and_text_versions(app, monkeypatch):
+    sent = {}
+    monkeypatch.setattr(app.ses, "send_email", lambda **kwargs: sent.update(kwargs))
+    call(app, {**VALID, "message": "Line one\nLine two"})
+    body = sent["Content"]["Simple"]["Body"]
+    html_body, text_body = body["Html"]["Data"], body["Text"]["Data"]
+
+    assert "New Contact Us Message" in html_body
+    assert '<a href="mailto:maria@example.com"' in html_body
+    assert "Line one<br>Line two" in html_body
+    assert "Maria Alvarez" in html_body and " UTC" in html_body
+    assert body["Html"]["Charset"] == "UTF-8"
+
+    assert "Maria Alvarez" in text_body and "maria@example.com" in text_body
+    assert "Line one\nLine two" in text_body and "Message ID:" in text_body
+    assert "<" not in text_body
+
+
+def test_user_content_is_html_escaped(app, monkeypatch):
+    sent = {}
+    monkeypatch.setattr(app.ses, "send_email", lambda **kwargs: sent.update(kwargs))
+    status, _ = call(app, {
+        "name": "<b>Evil</b>",
+        "email": 'x"onmouseover=alert(1)<a@example.com',
+        "message": "<script>alert('hi')</script> & <img src=x onerror=alert(1)>",
+    })
+    assert status == 201
+    html_body = sent["Content"]["Simple"]["Body"]["Html"]["Data"]
+    assert "<script>" not in html_body and "<img" not in html_body and "<b>Evil" not in html_body
+    assert "&lt;script&gt;" in html_body and "&amp;" in html_body and "&lt;b&gt;Evil&lt;/b&gt;" in html_body
+    assert 'onmouseover=alert(1)<a' not in html_body
+    assert '"onmouseover' not in html_body  # the quote cannot break out of the href attribute
+
+
+def test_received_time_is_readable(app):
+    assert app.format_received("2026-10-15T08:05:30+00:00") == "15 Oct 2026, 08:05 UTC"
+    assert app.format_received("not a date") == "not a date"
