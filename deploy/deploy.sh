@@ -26,9 +26,13 @@ lowest="$(printf '%s\n2.24.0\n' "${compose_version#v}" | sort -V | head -n1)"
 [ "$lowest" = "2.24.0" ] || fail "Docker Compose ${compose_version} is too old; 2.24.0+ is required."
 echo "docker compose ${compose_version}"
 
-# The backend must have a real JWT signing key (checked by name only - values
-# are never printed).
-has_var() { grep -qsE "^[[:space:]]*$1=.+" .env backend/.env; }
+# Create .env if missing and add a JWT signing key if none exists. Existing
+# values are never changed and secrets are never printed.
+step "Server environment file"
+bash deploy/ensure-env.sh
+
+# Checked by name only - values are never printed.
+has_var() { grep -qsE "^[[:space:]]*$1=.+" .env backend/.env deploy/production.env; }
 has_var JWT_SECRET_KEY || fail "JWT_SECRET_KEY is not set in .env or backend/.env (see docs/DEPLOYMENT.md)."
 # compose.yml interpolates ${DATABASE_URL} and ${CORS_ORIGINS} from the ROOT
 # .env; a value only in backend/.env would be overridden with an empty string.

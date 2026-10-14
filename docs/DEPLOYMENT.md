@@ -38,27 +38,43 @@ free -m
 grep -o '^[A-Z_]*=' .env backend/.env 2>/dev/null    # names only, never values
 ```
 
-The root `.env` must define `DATABASE_URL`, `CORS_ORIGINS` and
-**`JWT_SECRET_KEY`**. Before this release `JWT_SECRET_KEY` was never passed to
-the container, so production either signed tokens with the public default key
-or relied on a `backend/.env` copied into the image. The deploy script now
-refuses to run without it:
+### Where configuration comes from
 
+| Setting | Where it lives | Who sets it |
+|---|---|---|
+| `AWS_REGION`, `S3_BUCKET_NAME`, `DYNAMODB_ACTIVITY_TABLE` | `deploy/production.env` (committed, not secret) | Arrives with every `git pull` |
+| `JWT_SECRET_KEY` | server `.env` (git-ignored, mode 600) | Kept if present; otherwise **generated on the server** by `deploy/ensure-env.sh` during the deploy |
+| `DATABASE_URL`, `CORS_ORIGINS` | server root `.env` | You (already there today). Never generated |
+| AWS credentials | nowhere: the EC2 role `hvac-prod-backend-ec2` | Attach the role once (step 7) |
+
+`compose.yml` loads `deploy/production.env` first, then `.env`, then
+`backend/.env`; later files win. **Don't put an empty `S3_BUCKET_NAME=` line in
+the server files**: it would override the committed value (the deploy prints a
+warning if it finds one).
+
+On every deploy `deploy/ensure-env.sh`:
+* creates `.env` with owner-only permissions if it doesn't exist
+* adds a random `JWT_SECRET_KEY` only if neither `.env` nor `backend/.env` has one
+* never changes, reorders or prints existing values
+
+**Sessions:** before this release `JWT_SECRET_KEY` was never passed to the
+container. If the server had no key, production was signing tokens with the
+public default key, and the generated key signs everyone out once (expected).
+If `backend/.env` already contains a key, it is kept and nobody is signed out.
+
+To check without printing values:
 ```bash
-# If backend/.env already has JWT_SECRET_KEY, keep using that value (copy it to .env)
-# so existing sessions stay valid. Otherwise generate a new one; everyone signs in again.
-python3 -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_urlsafe(48))" >> .env
-chmod 600 .env backend/.env 2>/dev/null
+grep -o '^[A-Z_]*=' .env backend/.env 2>/dev/null
 ```
 
 ---
 
 ## 2. Terraform (S3, DynamoDB, IAM): needs your explicit approval
 
-Follow `terraform/README.md`. In short: bootstrap the state bucket, then
-`terraform plan -out=tfplan`, review (**12 to add, 0 change, 0 destroy**),
-`terraform apply tfplan`, and attach the instance profile with
-`aws ec2 associate-iam-instance-profile`.
+**Done (2026-10-14):** state bucket bootstrapped and the main stack applied
+(12 added). Bucket `hvac-prod-media-594775505885-ap-southeast-2`, table
+`hvac-prod-service-activity`, role/instance profile `hvac-prod-backend-ec2`.
+The remaining step, attaching the role to the instance, is step 7.
 
 The app runs without this step: uploads return a clear 503 and history waits in
 MySQL, so it can happen before or after the code deploy.
@@ -133,14 +149,30 @@ Manual equivalent on the server:
 GHCR_USER=<github-user> GHCR_TOKEN=<PAT with read:packages> bash deploy/deploy.sh <sha>
 ```
 
-## 7. Wire up AWS (after Terraform)
+## 7. Attach the IAM role (once, needs your approval)
 
+The AWS settings already arrive through `deploy/production.env`. The backend
+only needs credentials, which come from the instance role. From your PC
+(PowerShell):
+
+```powershell
+$env:AWS_PROFILE = "hvac-dev"
+aws ec2 associate-iam-instance-profile --region ap-southeast-2 `
+  --instance-id i-0fbca37ce8619e143 --iam-instance-profile Name=hvac-prod-backend-ec2
+```
+
+(Console alternative: EC2 → instance → Actions → Security → Modify IAM role.)
+This does not reboot or replace the instance. The role was checked with the
+IAM policy simulator: it allows photo put/get/delete under `customers/` and
+`service-requests/`, `ListBucket` on those prefixes, and DynamoDB
+`PutItem`/`Query` on the table. Everything else is denied.
+
+Then on the server:
 ```bash
-terraform -chdir=terraform output backend_env     # on your machine
-# On the server, append those three lines to .env, then:
-docker compose up -d backend
-docker compose logs --tail=30 backend   # the "S3_BUCKET_NAME is not set" warnings must be gone
+docker compose restart backend
+docker compose logs --tail=30 backend   # no "S3_BUCKET_NAME is not set" warnings
 docker compose exec backend python -c "import boto3; print(boto3.client('sts').get_caller_identity()['Arn'])"
+# expect ...assumed-role/hvac-prod-backend-ec2/i-0fbca37ce8619e143
 ```
 
 Add the exact browser origins of both apps to `CORS_ORIGINS` (API) and

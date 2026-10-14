@@ -13,11 +13,14 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    # Runtime configuration (JWT_SECRET_KEY, AWS_REGION, S3_BUCKET_NAME,
-    # DYNAMODB_ACTIVITY_TABLE, SMTP settings, ...) comes from these files on the
-    # server. Both are optional so a missing file never blocks startup; the
-    # deploy script checks that the required secrets are present.
+    # Runtime configuration, later files overriding earlier ones:
+    #   deploy/production.env - committed, non-secret AWS settings
+    #   .env, backend/.env    - server-only secrets (JWT_SECRET_KEY, DATABASE_URL,
+    #                           SMTP, ...); git-ignored, never committed
+    # AWS credentials are not configured anywhere: boto3 uses the EC2 role.
     env_file:
+      - path: ./deploy/production.env
+        required: true
       - path: ./.env
         required: false
       - path: ./backend/.env
