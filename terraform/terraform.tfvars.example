@@ -16,3 +16,7 @@ cors_allowed_origins = [
 ]
 
 noncurrent_version_retention_days = 90
+
+# Contact Us notifications (must be verified in SES) and the customer site origins.
+contact_notification_email = "you@example.com"
+contact_allowed_origins    = ["https://app.example.com"]

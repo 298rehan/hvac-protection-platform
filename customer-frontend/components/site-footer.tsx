@@ -7,6 +7,7 @@ const PLAN_LINKS = [
   { href: "/plans", label: "Compare plans" },
   { href: "/register", label: "Create an account" },
   { href: "/login", label: "Member sign in" },
+  { href: "/contact", label: "Contact us" },
 ];
 
 export function SiteFooter() {

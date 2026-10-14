@@ -7,6 +7,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.68"
     }
+    # Zips the Contact Us Lambda source (lambda/contact) at plan time.
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.7"
+    }
   }
 
   # Remote state in the dedicated, private, versioned bucket created by

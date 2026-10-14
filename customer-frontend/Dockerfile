@@ -18,6 +18,9 @@ ENV NODE_OPTIONS="--max-old-space-size=400"
 # When not supplied the app keeps its built-in default. An empty value would
 # override that default, so the variable is removed in that case.
 ARG NEXT_PUBLIC_API_URL
+# Public Contact Us endpoint (API Gateway). Not a secret.
+ARG NEXT_PUBLIC_CONTACT_API_URL
+ENV NEXT_PUBLIC_CONTACT_API_URL=$NEXT_PUBLIC_CONTACT_API_URL
 RUN if [ -n "$NEXT_PUBLIC_API_URL" ]; then npm run build; \
     else env -u NEXT_PUBLIC_API_URL npm run build; fi
 

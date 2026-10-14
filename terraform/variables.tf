@@ -80,3 +80,18 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "contact_notification_email" {
+  description = "Receives Contact Us notifications. While SES is in sandbox mode it is also the sender, and must be verified (click the link AWS emails to it)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$", var.contact_notification_email))
+    error_message = "Enter a valid email address."
+  }
+}
+
+variable "contact_allowed_origins" {
+  description = "Customer-site origins allowed to call the Contact Us API from the browser (CORS)."
+  type        = list(string)
+}

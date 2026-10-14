@@ -40,3 +40,16 @@ output "backend_env" {
     DYNAMODB_ACTIVITY_TABLE=${aws_dynamodb_table.activity.name}
   EOT
 }
+
+output "contact_api_url" {
+  description = "POST endpoint for the Contact Us form (NEXT_PUBLIC_CONTACT_API_URL)."
+  value       = "${aws_apigatewayv2_stage.contact.invoke_url}contact"
+}
+
+output "contact_lambda_function_name" {
+  value = aws_lambda_function.contact.function_name
+}
+
+output "contact_messages_table_name" {
+  value = aws_dynamodb_table.contact_messages.name
+}

@@ -24,6 +24,7 @@ import { cx } from "@/lib/format";
 const PUBLIC_LINKS = [
   { href: "/", label: "Home" },
   { href: "/plans", label: "Plans" },
+  { href: "/contact", label: "Contact" },
 ];
 
 const ACCOUNT_LINKS = [

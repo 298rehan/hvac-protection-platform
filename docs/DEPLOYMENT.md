@@ -266,6 +266,32 @@ terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
 ```
 
+## Contact Us (serverless, separate from the backend)
+
+```
+/contact page -> API Gateway (POST /contact) -> Lambda hvac-prod-contact -> DynamoDB hvac-prod-contact-messages
+                                                                         -> SES email to the owner
+```
+
+* **Code:** `lambda/contact/app.py` (tests: `lambda/contact/test_app.py`).
+  Infrastructure: `terraform/contact-us.tf`. Terraform zips the code, and any
+  change to `app.py` redeploys the function on the next `terraform apply`.
+* **URL:** `terraform output contact_api_url`. It's baked into the customer
+  build as `NEXT_PUBLIC_CONTACT_API_URL` (CI `build-args`, overridable with the
+  repository variable `CONTACT_API_URL`). It's a public URL, not a secret.
+* **CORS:** only the origins in `contact_allowed_origins` (terraform.tfvars).
+  Throttled to 5 requests/s (burst 10).
+* **Email:** SES is in sandbox mode, so the notification address is both
+  sender and recipient and must be verified: open the "Amazon Web Services –
+  Email Address Verification Request" email and click the link. Until then,
+  messages are still saved and the Lambda logs `notification email failed:
+  MessageRejected`. The customer's address is used as Reply-To, never as sender.
+  Check status:
+  `aws sesv2 get-email-identity --email-identity <address> --region ap-southeast-2`
+* **Read messages:** DynamoDB console → `hvac-prod-contact-messages` → Explore items.
+* **Logs:** CloudWatch → `/aws/lambda/hvac-prod-contact` (14-day retention).
+* **Tests:** `python -m pytest lambda/contact` (moto, no AWS needed).
+
 ## Known limitations
 
 * Technicians have no self-service password change. Admins set the initial password.
