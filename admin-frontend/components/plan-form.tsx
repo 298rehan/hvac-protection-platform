@@ -7,8 +7,12 @@ import { Checkbox, Field, Input, MoneyInput, Select, Textarea } from "@/componen
 import { MapPinIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { Alert, Button, Card, CardHeader } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
+import { AC_TYPE_LABELS, SERVICE_TYPE_LABELS } from "@/lib/service-format";
 import { createPlan, fetchRegions, updatePlan } from "@/services/adminService";
-import type { Plan, PlanPayload, PlanRegionInput, Region } from "@/types";
+import type { AcType, Plan, PlanPayload, PlanRegionInput, Region, ServiceType } from "@/types";
+
+const AC_TYPES = Object.keys(AC_TYPE_LABELS) as AcType[];
+const SERVICE_TYPES = Object.keys(SERVICE_TYPE_LABELS) as ServiceType[];
 
 interface FormState {
   name: string;
@@ -19,6 +23,9 @@ interface FormState {
   is_active: boolean;
   display_order: string;
   max_ac_units: string;
+  /** null = not restricted (no coverage rule defined). */
+  covered_ac_types: AcType[] | null;
+  covered_service_types: ServiceType[] | null;
   regions: PlanRegionInput[];
 }
 
@@ -33,6 +40,8 @@ function initialState(plan?: Plan): FormState {
       is_active: true,
       display_order: "0",
       max_ac_units: "1",
+      covered_ac_types: null,
+      covered_service_types: null,
       regions: [],
     };
   }
@@ -45,6 +54,8 @@ function initialState(plan?: Plan): FormState {
     is_active: plan.is_active,
     display_order: String(plan.display_order),
     max_ac_units: String(plan.max_ac_units ?? 1),
+    covered_ac_types: plan.covered_ac_types ?? null,
+    covered_service_types: plan.covered_service_types ?? null,
     regions: plan.regions.map((region) => ({
       state_code: region.state_code,
       monthly_price: region.monthly_price,
@@ -150,6 +161,11 @@ export function PlanForm({ plan }: { plan?: Plan }) {
       return;
     }
 
+    if (form.covered_ac_types?.length === 0 || form.covered_service_types?.length === 0) {
+      setError("Select at least one covered equipment type and issue type, or choose Not restricted.");
+      return;
+    }
+
     const payload: PlanPayload = {
       name: form.name.trim(),
       description: form.description.trim(),
@@ -159,6 +175,8 @@ export function PlanForm({ plan }: { plan?: Plan }) {
       is_active: form.is_active,
       display_order: Number(form.display_order) || 0,
       max_ac_units: maxUnits,
+      covered_ac_types: form.covered_ac_types,
+      covered_service_types: form.covered_service_types,
       regions: form.regions.map((region) => ({
         state_code: region.state_code,
         monthly_price: region.monthly_price,
@@ -277,6 +295,29 @@ export function PlanForm({ plan }: { plan?: Plan }) {
               onChange={(e) => set("is_active", e.target.checked)}
             />
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Coverage rules"
+          description="Which equipment and issue types customers can claim for under this plan. Checked by the backend when a claim is submitted."
+        />
+        <div className="grid gap-6 px-5 py-5 lg:grid-cols-2">
+          <CoverageEditor
+            legend="Covered equipment"
+            options={AC_TYPES}
+            labels={AC_TYPE_LABELS}
+            value={form.covered_ac_types}
+            onChange={(next) => set("covered_ac_types", next)}
+          />
+          <CoverageEditor
+            legend="Covered issue types"
+            options={SERVICE_TYPES}
+            labels={SERVICE_TYPE_LABELS}
+            value={form.covered_service_types}
+            onChange={(next) => set("covered_service_types", next)}
+          />
         </div>
       </Card>
 
@@ -435,5 +476,51 @@ export function PlanForm({ plan }: { plan?: Plan }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/** "Not restricted" (null) or an explicit list of allowed values. */
+function CoverageEditor<T extends string>({
+  legend,
+  options,
+  labels,
+  value,
+  onChange,
+}: {
+  legend: string;
+  options: T[];
+  labels: Record<T, string>;
+  value: T[] | null;
+  onChange: (next: T[] | null) => void;
+}) {
+  const restricted = value !== null;
+  return (
+    <fieldset>
+      <legend className="text-sm font-semibold text-slate-900">{legend}</legend>
+      <div className="mt-3 space-y-2">
+        <Checkbox
+          label="Not restricted"
+          description="No rule defined yet: every type is accepted."
+          checked={!restricted}
+          onChange={(e) => onChange(e.target.checked ? null : [...options])}
+        />
+        {restricted ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {options.map((option) => (
+              <Checkbox
+                key={option}
+                label={labels[option]}
+                checked={value.includes(option)}
+                onChange={(e) =>
+                  onChange(
+                    e.target.checked ? [...value, option] : value.filter((v) => v !== option),
+                  )
+                }
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </fieldset>
   );
 }

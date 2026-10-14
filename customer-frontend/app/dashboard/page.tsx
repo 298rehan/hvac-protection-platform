@@ -198,8 +198,8 @@ export default function DashboardPage() {
         <QuickLink
           href="/dashboard/service-requests"
           icon={<ClipboardIcon />}
-          title="Service requests"
-          body="Request a repair or maintenance visit and follow its progress."
+          title="Claims"
+          body="File a claim for a repair or maintenance visit and follow its progress."
         />
       </div>
 

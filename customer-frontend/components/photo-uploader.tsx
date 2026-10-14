@@ -31,7 +31,7 @@ export type RequestUpload = (file: {
 }) => Promise<PhotoUploadResponse>;
 
 /** Client-side pre-check. The backend re-validates type, size and file contents. */
-function validate(file: File): string | null {
+export function validate(file: File): string | null {
   const name = file.name.toLowerCase();
   const extensionOk = ALLOWED_PHOTO_EXTENSIONS.some((ext) => name.endsWith(ext));
   const typeOk = (ALLOWED_PHOTO_TYPES as readonly string[]).includes(file.type);
@@ -45,7 +45,7 @@ function validate(file: File): string | null {
  * POST the file straight to S3 using the backend's presigned form. Every field
  * the backend returned is sent unchanged and the file goes last, as S3 requires.
  */
-function postToS3(
+export function postToS3(
   upload: PhotoUploadResponse["upload"],
   file: File,
   onProgress: (percent: number) => void,

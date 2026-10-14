@@ -3,12 +3,15 @@
 from app.models.enums import (
     ALLOWED_STATUS_TRANSITIONS,
     PHOTO_RECOMMENDED_SERVICE_TYPES,
+    PREFERRED_WINDOW_HOURS,
     SERVICE_REQUEST_TRANSITIONS,
     TERMINAL_SERVICE_REQUEST_STATUSES,
     AcType,
+    AppointmentStatus,
     BillingCycle,
     PhotoCategory,
     PhotoStatus,
+    PreferredWindow,
     PurchaseStatus,
     ReportedCondition,
     ServiceRequestStatus,
@@ -22,19 +25,25 @@ from app.models.ac_unit import AcUnit
 from app.models.service_request import ServiceRequest
 from app.models.photo import Photo
 from app.models.activity_outbox import ActivityOutbox
+from app.models.technician_profile import TechnicianProfile
+from app.models.appointment import Appointment
 
 __all__ = [
     "ALLOWED_STATUS_TRANSITIONS",
     "PHOTO_RECOMMENDED_SERVICE_TYPES",
+    "PREFERRED_WINDOW_HOURS",
     "SERVICE_REQUEST_TRANSITIONS",
     "TERMINAL_SERVICE_REQUEST_STATUSES",
     "AcType",
     "AcUnit",
     "ActivityOutbox",
+    "Appointment",
+    "AppointmentStatus",
     "BillingCycle",
     "Photo",
     "PhotoCategory",
     "PhotoStatus",
+    "PreferredWindow",
     "Plan",
     "PlanRegion",
     "Purchase",
@@ -44,6 +53,7 @@ __all__ = [
     "ServiceRequest",
     "ServiceRequestStatus",
     "ServiceType",
+    "TechnicianProfile",
     "User",
     "UserRole",
 ]

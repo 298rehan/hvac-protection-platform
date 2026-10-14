@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import button, detail_table %}
+{% block content %}
+<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
+  Hi {{ first_name }} - a technician visit has been confirmed for claim <strong>#{{ claim_id }}</strong>.
+</p>
+{{ detail_table([
+  ('Claim', '#' + claim_id),
+  ('Visit time', visit_time),
+  ('Technician', technician_name),
+  ('Address', address),
+  ('Equipment', equipment)
+]) }}
+<p style="margin:14px 0 0;font-size:15px;line-height:1.65;color:#334155;">
+  {{ closing_note }}
+</p>
+{{ button(link_url, link_label) }}
+{% endblock %}

@@ -153,6 +153,9 @@ const EVENT_DOTS: Record<string, string> = {
   CUSTOMER_DECLINED_WORK: "bg-slate-400",
   REQUEST_COMPLETED: "bg-emerald-500",
   PHOTOS_UPLOADED: "bg-sky-400",
+  INFO_REQUESTED: "bg-yellow-500",
+  APPOINTMENT_CONFIRMED: "bg-teal-500",
+  APPOINTMENT_CANCELLED: "bg-slate-400",
 };
 
 export function ActivityTimeline({
@@ -166,7 +169,7 @@ export function ActivityTimeline({
 }) {
   return (
     <Card>
-      <CardHeader title="Activity history" description="Every change to this request, oldest first." />
+      <CardHeader title="Activity history" description="Every change to this claim, oldest first." />
       <div className="px-5 py-5">
         {loading ? (
           <p className="text-sm text-slate-500">Loading history…</p>

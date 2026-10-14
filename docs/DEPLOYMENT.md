@@ -118,15 +118,26 @@ running is changed.
 cd /home/ubuntu/hvac-project/hvac-protection-platform
 export IMAGE_TAG=<commit sha from the GitHub Actions run>
 
-docker compose run --rm --no-deps backend alembic current     # expect 0001_initial
-docker compose run --rm --no-deps backend alembic upgrade head
-docker compose run --rm --no-deps backend alembic current     # expect 0002_maintenance_workflow (head)
+docker compose run --rm --no-deps backend alembic current     # where the server is now
+docker compose run --rm --no-deps backend alembic upgrade head # applies 0002 and/or 0003 as needed
+docker compose run --rm --no-deps backend alembic current     # expect 0003_claims_scheduling (head)
 ```
 
 What `0002_maintenance_workflow` does (additive only):
 * `users.role` gains `TECHNICIAN` (appended to the ENUM, in-place, metadata-only).
 * `plans.max_ac_units INT NOT NULL DEFAULT 1` (existing plans get 1).
 * Creates `ac_units`, `service_requests`, `photos`, `activity_outbox`.
+
+What `0003_claims_scheduling` does (additive only):
+* ENUM values appended: `ac_type` FURNACE; `service_type` SYSTEM_NOT_STARTING,
+  THERMOSTAT_ISSUE; `service_requests.status` NEEDS_INFO, SCHEDULED.
+* Nullable columns: `plans.covered_ac_types`, `plans.covered_service_types`
+  (NULL = not restricted), `service_requests.preferred_windows`,
+  `info_request_note`, `info_response_note`.
+* Creates `technician_profiles` (service states, ZIP prefixes, specialties) and
+  `appointments` (UTC start/end, property time zone, CONFIRMED/CANCELLED).
+* Verified on a disposable MySQL 8.0.46: upgrade from 0002 with existing rows,
+  `alembic check`, the downgrade guard, and a downgrade/re-upgrade cycle.
 
 The **old application keeps working on the migrated schema**. It doesn't read
 the new column or tables, so migrating before the deploy causes no downtime.
@@ -265,6 +276,34 @@ cd admin-frontend    && npm ci && npm run lint && npx tsc --noEmit && npm run bu
 terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate
 ```
+
+## Claims, technician matching and appointments
+
+Claims are the existing `service_requests` records (shown as "Claims" in both
+apps; URLs unchanged).
+
+* **Eligibility:** an ACTIVE purchase (admin-confirmed) and an AC unit covered by
+  it. Plan coverage rules `covered_ac_types` / `covered_service_types` are
+  enforced when set; **they are NULL (not restricted) until the business defines
+  them** in Admin → Plans.
+* **Statuses:** Submitted → Under review → (More info required ↔ Under review) →
+  Approved/Rejected → Assigned → Scheduled → Inspection → (Awaiting customer
+  approval) → In progress → Completed; Cancelled where permitted. Each move is
+  role-checked on the server (`SERVICE_REQUEST_TRANSITIONS` in `models/enums.py`).
+* **Technician matching:** Admin → Technicians → set each technician's service
+  states, optional ZIP prefixes and specialties. A claim's eligible technicians
+  are the active ones whose states include the property state and, if they list
+  ZIP prefixes, whose prefixes match the property ZIP. They are ranked by
+  specialty match, then how many of the customer's preferred windows they are
+  free in, then open jobs. **No technician is eligible until areas are set.**
+* **Appointments:** the admin enters a time in the property's local time
+  (`STATE_TIMEZONES` in `core/regions.py`); it is stored in UTC. Overlapping
+  CONFIRMED visits for one technician are rejected with 409. Bookings lock the
+  technician row and re-check with a locking read, which is proven by
+  `tests/test_booking_race.py` on MySQL. The customer and technician get an
+  email through the existing EMAIL_MODE settings (console/file/smtp).
+* **Availability** means "no conflicting confirmed visit". Working hours,
+  holidays and travel time are not modelled yet.
 
 ## Contact Us (serverless, separate from the backend)
 

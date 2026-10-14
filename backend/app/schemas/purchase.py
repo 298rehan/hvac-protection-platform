@@ -31,6 +31,8 @@ class PurchasePlanRef(ORMModel):
     description: str
     features: list[str]
     max_ac_units: int = 1
+    covered_ac_types: list[str] | None = None
+    covered_service_types: list[str] | None = None
 
 
 class PurchaseStatusHistoryOut(ORMModel):

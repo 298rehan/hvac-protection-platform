@@ -6,6 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.regions import US_STATES, state_name
+from app.models.enums import AcType, ServiceType
 from app.schemas.common import ORMModel
 
 
@@ -68,6 +69,9 @@ class PlanCreate(BaseModel):
     is_active: bool = True
     display_order: int = 0
     max_ac_units: int = Field(default=1, ge=1, le=20)
+    # null = not restricted (coverage rules not defined for this plan).
+    covered_ac_types: list[AcType] | None = None
+    covered_service_types: list[ServiceType] | None = None
     regions: list[PlanRegionIn] = Field(default_factory=list)
 
     @field_validator("features")
@@ -98,6 +102,9 @@ class PlanUpdate(BaseModel):
     is_active: bool | None = None
     display_order: int | None = None
     max_ac_units: int | None = Field(default=None, ge=1, le=20)
+    # Send null to remove a restriction, a list to set one.
+    covered_ac_types: list[AcType] | None = None
+    covered_service_types: list[ServiceType] | None = None
     # When present, this list fully replaces the plan's regional pricing.
     regions: list[PlanRegionIn] | None = None
 
@@ -132,6 +139,8 @@ class PlanOut(ORMModel):
     is_active: bool
     display_order: int
     max_ac_units: int
+    covered_ac_types: list[AcType] | None = None
+    covered_service_types: list[ServiceType] | None = None
     created_at: datetime
     updated_at: datetime
     regions: list[PlanRegionOut] = Field(default_factory=list)
@@ -147,6 +156,8 @@ class PlanPublicOut(ORMModel):
     features: list[str]
     display_order: int
     max_ac_units: int = 1
+    covered_ac_types: list[AcType] | None = None
+    covered_service_types: list[ServiceType] | None = None
     state_code: str
     state_name: str
     monthly_price: Decimal

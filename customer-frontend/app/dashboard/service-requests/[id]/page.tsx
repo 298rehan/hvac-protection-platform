@@ -23,14 +23,18 @@ import { formatDateTime } from "@/lib/format";
 import {
   AC_TYPE_LABELS,
   CUSTOMER_CANCELLABLE,
+  PREFERRED_WINDOW_LABELS,
   REQUEST_STATUS_DESCRIPTIONS,
   SERVICE_TYPE_LABELS,
+  formatVisit,
+  formatWindowDate,
 } from "@/lib/service-labels";
 import {
   cancelServiceRequest,
   decideProposedWork,
   fetchServiceRequest,
   fetchServiceRequestHistory,
+  provideClaimInfo,
   requestServiceRequestPhotoUpload,
 } from "@/services/serviceRequestService";
 import type { ActivityEvent, ServiceRequestDetail } from "@/types";
@@ -45,6 +49,7 @@ export default function ServiceRequestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [infoNote, setInfoNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(() => {
@@ -64,11 +69,13 @@ export default function ServiceRequestDetailPage() {
   }, [reload]);
 
   useEffect(() => {
-    if (window.location.search.includes("created=1")) {
-      const id = window.setTimeout(
-        () => setNotice("Request submitted. Our team will review it shortly."),
-        0,
-      );
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("created") === "1") {
+      const failed = Number(params.get("photos_failed") ?? 0);
+      const message = failed
+        ? `Claim submitted, but ${failed} photo(s) could not be uploaded. You can add them again below.`
+        : "Claim submitted. Our team will review it shortly.";
+      const id = window.setTimeout(() => setNotice(message), 0);
       return () => window.clearTimeout(id);
     }
   }, []);
@@ -76,12 +83,12 @@ export default function ServiceRequestDetailPage() {
   if (notFound) {
     return (
       <div className="space-y-6">
-        <BackLink href="/dashboard/service-requests">Service Requests</BackLink>
-        <Alert>This service request was not found.</Alert>
+        <BackLink href="/dashboard/service-requests">Claims</BackLink>
+        <Alert>This claim was not found.</Alert>
       </div>
     );
   }
-  if (!request) return error ? <Alert>{error}</Alert> : <PageLoader label="Loading request" />;
+  if (!request) return error ? <Alert>{error}</Alert> : <PageLoader label="Loading claim" />;
 
   async function run(action: () => Promise<ServiceRequestDetail>, success: string) {
     setBusy(true);
@@ -101,14 +108,27 @@ export default function ServiceRequestDetailPage() {
   }
 
   function cancel() {
-    if (!window.confirm("Cancel this service request?")) return;
-    void run(() => cancelServiceRequest(requestId, note.trim() || null), "Request cancelled.");
+    if (!window.confirm("Cancel this claim?")) return;
+    void run(() => cancelServiceRequest(requestId, note.trim() || null), "Claim cancelled.");
+  }
+
+  function sendInfo() {
+    const text = infoNote.trim();
+    if (text.length < 3) {
+      setError("Please add the requested information.");
+      return;
+    }
+    void run(async () => {
+      const updated = await provideClaimInfo(requestId, text);
+      setInfoNote("");
+      return updated;
+    }, "Thanks - your claim is back with our review team.");
   }
 
   function decide(approve: boolean) {
     const question = approve
       ? "Approve the proposed work so the technician can start?"
-      : "Decline the proposed work? The request will be closed.";
+      : "Decline the proposed work? The claim will be closed.";
     if (!window.confirm(question)) return;
     void run(
       () => decideProposedWork(requestId, approve, note.trim() || null),
@@ -118,6 +138,8 @@ export default function ServiceRequestDetailPage() {
 
   const unit = request.ac_unit;
   const awaiting = request.status === "AWAITING_CUSTOMER_APPROVAL";
+  const needsInfo = request.status === "NEEDS_INFO";
+  const appointment = request.appointment;
   const cancellable = CUSTOMER_CANCELLABLE.includes(request.status);
   const canUpload = request.allowed_upload_categories.includes("CUSTOMER");
   const hasReport =
@@ -125,7 +147,7 @@ export default function ServiceRequestDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/dashboard/service-requests">Service Requests</BackLink>
+      <BackLink href="/dashboard/service-requests">Claims</BackLink>
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
@@ -133,7 +155,7 @@ export default function ServiceRequestDetailPage() {
             <RequestStatusBadge status={request.status} />
           </span>
         }
-        description={`Request #${request.id} · ${REQUEST_STATUS_DESCRIPTIONS[request.status]}`}
+        description={`Claim #${request.id} · ${REQUEST_STATUS_DESCRIPTIONS[request.status]}`}
       />
 
       {notice ? <Alert tone="success">{notice}</Alert> : null}
@@ -149,6 +171,25 @@ export default function ServiceRequestDetailPage() {
           <RequestProgress status={request.status} />
         </Card>
       )}
+
+      {needsInfo ? (
+        <Card className="border-orange-200">
+          <CardHeader title="More information required" description="Our review team asked:" />
+          <div className="space-y-4 px-5 py-5 sm:px-6">
+            <p className="rounded-lg bg-orange-50 px-4 py-3 text-sm whitespace-pre-line text-orange-900 ring-1 ring-orange-100">
+              {request.info_request_note}
+            </p>
+            <Field label="Your answer" htmlFor="info-note" hint={`${infoNote.trim().length} / 2000 - you can also add photos below.`}>
+              <Textarea id="info-note" rows={4} maxLength={2000} value={infoNote} onChange={(e) => setInfoNote(e.target.value)} />
+            </Field>
+            <div className="flex justify-end">
+              <Button onClick={sendInfo} disabled={busy}>
+                Send information
+              </Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {awaiting ? (
         <Card className="border-amber-200">
@@ -175,10 +216,19 @@ export default function ServiceRequestDetailPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Your request" description={`Submitted ${formatDateTime(request.created_at)}`} />
+            <CardHeader title="Your claim" description={`Submitted ${formatDateTime(request.created_at)}`} />
             <p className="px-5 py-5 text-sm leading-relaxed whitespace-pre-line text-slate-700 sm:px-6">
               {request.description}
             </p>
+            {request.info_response_note && !needsInfo ? (
+              <div className="border-t border-slate-100 px-5 py-4 sm:px-6">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Information you provided</p>
+                {request.info_request_note ? (
+                  <p className="mt-1 text-xs text-slate-500">Asked: {request.info_request_note}</p>
+                ) : null}
+                <p className="mt-1 text-sm whitespace-pre-line text-slate-700">{request.info_response_note}</p>
+              </div>
+            ) : null}
           </Card>
 
           {hasReport ? (
@@ -215,7 +265,7 @@ export default function ServiceRequestDetailPage() {
               title="Photos"
               description={
                 request.photo_recommended && canUpload
-                  ? "Photos of the problem help us review this request."
+                  ? "Photos of the problem help us review this claim."
                   : undefined
               }
             />
@@ -247,8 +297,16 @@ export default function ServiceRequestDetailPage() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Technician" />
-            <div className="px-5 py-4 text-sm sm:px-6">
+            <CardHeader title="Technician visit" />
+            <div className="space-y-3 px-5 py-4 text-sm sm:px-6">
+              {appointment ? (
+                <div className="rounded-lg bg-sky-50 px-3 py-2.5 ring-1 ring-sky-100">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">Confirmed</p>
+                  <p className="mt-0.5 font-medium text-slate-900">
+                    {formatVisit(appointment.start_at, appointment.end_at, appointment.timezone)}
+                  </p>
+                </div>
+              ) : null}
               {request.technician ? (
                 <p className="font-medium text-slate-900">
                   {request.technician.first_name} {request.technician.last_name}
@@ -256,6 +314,20 @@ export default function ServiceRequestDetailPage() {
               ) : (
                 <p className="text-slate-500">Not assigned yet.</p>
               )}
+              {!appointment && request.preferred_windows.length ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Your preferred times (not yet confirmed)
+                  </p>
+                  <ul className="mt-1 space-y-0.5 text-slate-600">
+                    {request.preferred_windows.map((w) => (
+                      <li key={`${w.date}-${w.window}`}>
+                        {formatWindowDate(w.date)} &middot; {PREFERRED_WINDOW_LABELS[w.window]}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </Card>
 
@@ -269,7 +341,7 @@ export default function ServiceRequestDetailPage() {
               </DetailRow>
               <DetailRow label="Type">{AC_TYPE_LABELS[unit.ac_type]}</DetailRow>
               <DetailRow label="Address">
-                {unit.address}, {unit.city}, {unit.state}
+                {unit.address}, {unit.city}, {unit.state} {unit.zip_code}
               </DetailRow>
               <DetailRow label="Plan">{request.plan.plan_name}</DetailRow>
             </dl>
@@ -277,7 +349,7 @@ export default function ServiceRequestDetailPage() {
 
           {cancellable ? (
             <Card className="p-5 sm:p-6">
-              <p className="text-sm font-semibold text-slate-900">Cancel this request</p>
+              <p className="text-sm font-semibold text-slate-900">Cancel this claim</p>
               <p className="mt-1 text-sm text-slate-500">You can cancel until a technician is assigned.</p>
               {!awaiting ? (
                 <div className="mt-3">
@@ -287,7 +359,7 @@ export default function ServiceRequestDetailPage() {
                 </div>
               ) : null}
               <Button variant="danger" size="sm" className="mt-4" onClick={cancel} disabled={busy}>
-                Cancel request
+                Cancel claim
               </Button>
             </Card>
           ) : null}

@@ -8,7 +8,7 @@ import { ServiceStatusBadge } from "@/components/service-ui";
 import { Alert, Card, PageHeader, Skeleton } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { isTerminal, SERVICE_TYPE_LABELS } from "@/lib/service-format";
+import { formatVisit, isTerminal, SERVICE_TYPE_LABELS } from "@/lib/service-format";
 import { fetchAssignedJobs } from "@/services/serviceRequestService";
 import type { ServiceRequestListItem } from "@/types";
 
@@ -89,6 +89,11 @@ export function TechnicianJobs({ closed }: { closed: boolean }) {
                     {job.ac_unit.address}, {job.ac_unit.city}, {job.ac_unit.state} {job.ac_unit.zip_code}
                   </li>
                 </ul>
+                {job.appointment ? (
+                  <p className="mt-3 rounded-md bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-900 ring-1 ring-teal-200">
+                    Visit: {formatVisit(job.appointment.start_at, job.appointment.end_at, job.timezone)}
+                  </p>
+                ) : null}
                 <p className="mt-4 flex items-center justify-between text-xs text-slate-500">
                   Updated {formatDate(job.updated_at)}
                   <span className="inline-flex items-center gap-0.5 font-semibold text-brand-600">

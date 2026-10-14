@@ -46,6 +46,9 @@ export interface PublicPlan {
   display_order: number;
   /** How many AC units one purchase of this plan covers. */
   max_ac_units: number;
+  /** null = not restricted (coverage rules not defined for this plan). */
+  covered_ac_types: AcType[] | null;
+  covered_service_types: ServiceType[] | null;
   state_code: string;
   state_name: string;
   monthly_price: string;
@@ -59,6 +62,10 @@ export interface PurchasePlanRef {
   slug: string;
   description: string;
   features: string[];
+  max_ac_units: number;
+  /** null = not restricted (coverage rules not defined for this plan). */
+  covered_ac_types: AcType[] | null;
+  covered_service_types: ServiceType[] | null;
 }
 
 export interface Purchase {
@@ -134,7 +141,8 @@ export type AcType =
   | "PACKAGED"
   | "WINDOW"
   | "PORTABLE"
-  | "OTHER";
+  | "OTHER"
+  | "FURNACE";
 
 export type ReportedCondition = "GOOD" | "FAIR" | "POOR" | "NOT_WORKING" | "UNKNOWN";
 
@@ -145,7 +153,9 @@ export type ServiceType =
   | "WATER_LEAK"
   | "STRANGE_NOISE"
   | "VISIBLE_DAMAGE"
-  | "OTHER";
+  | "OTHER"
+  | "SYSTEM_NOT_STARTING"
+  | "THERMOSTAT_ISSUE";
 
 export type ServiceRequestStatus =
   | "SUBMITTED"
@@ -157,7 +167,29 @@ export type ServiceRequestStatus =
   | "AWAITING_CUSTOMER_APPROVAL"
   | "IN_PROGRESS"
   | "COMPLETED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "NEEDS_INFO"
+  | "SCHEDULED";
+
+/** Customer's preferred visit window (property local time). */
+export type PreferredWindowName = "MORNING" | "AFTERNOON" | "EVENING";
+
+export interface PreferredWindow {
+  /** YYYY-MM-DD in the property's time zone. */
+  date: string;
+  window: PreferredWindowName;
+}
+
+export interface Appointment {
+  id: number;
+  technician: TechnicianBrief;
+  /** UTC ISO timestamps. */
+  start_at: string;
+  end_at: string;
+  /** Property IANA time zone, e.g. America/Chicago. */
+  timezone: string;
+  status: "CONFIRMED" | "CANCELLED";
+}
 
 export type PhotoCategory = "INITIAL" | "CUSTOMER" | "INSPECTION" | "BEFORE" | "AFTER";
 
@@ -239,6 +271,9 @@ export interface ServiceRequestListItem {
   updated_at: string;
   ac_unit: AcUnitBrief;
   technician: TechnicianBrief | null;
+  /** Property time zone and the confirmed visit, if any. */
+  timezone: string;
+  appointment: Appointment | null;
 }
 
 export interface ServiceRequestDetail extends ServiceRequestListItem {
@@ -249,6 +284,9 @@ export interface ServiceRequestDetail extends ServiceRequestListItem {
   work_performed: string | null;
   parts_used: string | null;
   customer_decision_note: string | null;
+  info_request_note: string | null;
+  info_response_note: string | null;
+  preferred_windows: PreferredWindow[];
   reviewed_at: string | null;
   decided_at: string | null;
   assigned_at: string | null;

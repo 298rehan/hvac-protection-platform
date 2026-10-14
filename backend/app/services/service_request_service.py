@@ -30,7 +30,9 @@ from app.models import (
     UserRole,
 )
 from app.schemas.ac_unit import AcUnitBrief
+from app.core.regions import state_timezone
 from app.schemas.service_request import (
+    AppointmentOut,
     PlanBrief,
     ReportUpdate,
     ServiceRequestCreate,
@@ -39,7 +41,7 @@ from app.schemas.service_request import (
     TechnicianBrief,
 )
 from app.schemas.user import UserSummary
-from app.services import ac_unit_service, activity, photo_service
+from app.services import ac_unit_service, activity, photo_service, scheduling_service
 
 STATUS_LABELS = {
     S.SUBMITTED: "submitted",
@@ -52,6 +54,8 @@ STATUS_LABELS = {
     S.IN_PROGRESS: "in progress",
     S.COMPLETED: "completed",
     S.CANCELLED: "cancelled",
+    S.NEEDS_INFO: "waiting for more information",
+    S.SCHEDULED: "scheduled",
 }
 
 REPORT_EDITABLE = {S.INSPECTION_IN_PROGRESS, S.AWAITING_CUSTOMER_APPROVAL, S.IN_PROGRESS}
@@ -94,6 +98,20 @@ def get_for_viewer(db: Session, request_id: int, user: User, *, lock: bool = Fal
 # --- Creation -----------------------------------------------------------------
 
 
+def _assert_covered(plan, unit: AcUnit, service_type) -> None:
+    """Apply the plan's coverage rules. A null rule means not restricted."""
+    if plan.covered_ac_types is not None and unit.ac_type.value not in plan.covered_ac_types:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Your {plan.name} plan does not cover this type of equipment.",
+        )
+    if plan.covered_service_types is not None and service_type.value not in plan.covered_service_types:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Your {plan.name} plan does not cover this type of issue.",
+        )
+
+
 def create_request(db: Session, *, customer: User, payload: ServiceRequestCreate) -> ServiceRequest:
     unit = ac_unit_service.get_owned(db, payload.ac_unit_id, customer)
 
@@ -113,6 +131,10 @@ def create_request(db: Session, *, customer: User, payload: ServiceRequestCreate
             status_code=status.HTTP_409_CONFLICT,
             detail="This AC unit already has an open service request.",
         )
+    _assert_covered(purchase.plan, unit, payload.service_type)
+    preferred = scheduling_service.validate_preferred_windows(
+        payload.preferred_windows, state_timezone(unit.state)
+    )
 
     request = ServiceRequest(
         customer_id=customer.id,
@@ -121,6 +143,7 @@ def create_request(db: Session, *, customer: User, payload: ServiceRequestCreate
         service_type=payload.service_type,
         description=payload.description,
         status=S.SUBMITTED,
+        preferred_windows=preferred or None,
     )
     db.add(request)
     db.flush()
@@ -236,7 +259,7 @@ def reject(db: Session, *, request: ServiceRequest, admin: User, reason: str) ->
     return _commit(db, request)
 
 
-def _get_technician(db: Session, technician_id: int) -> User:
+def get_active_technician(db: Session, technician_id: int) -> User:
     tech = db.get(User, technician_id)
     if tech is None or tech.role is not UserRole.TECHNICIAN:
         raise HTTPException(
@@ -251,8 +274,31 @@ def _get_technician(db: Session, technician_id: int) -> User:
 
 
 def assign(db: Session, *, request: ServiceRequest, admin: User, technician_id: int) -> ServiceRequest:
-    """Assign an approved request, or reassign one nobody has started yet."""
-    tech = _get_technician(db, technician_id)
+    """Assign an approved request, or reassign one nobody has started yet.
+
+    Reassigning a SCHEDULED claim cancels its visit and returns it to ASSIGNED,
+    so a new time must be booked for the new technician.
+    """
+    tech = get_active_technician(db, technician_id)
+
+    if request.status is S.SCHEDULED:
+        if request.assigned_technician_id == tech.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The request is already assigned to that technician.",
+            )
+        scheduling_service.cancel_active_appointment(
+            db, request, admin, "Visit cancelled because the claim was reassigned."
+        )
+        request.assigned_technician_id = tech.id
+        _transition(
+            db, request, S.ASSIGNED, admin,
+            event_type=activity.TECHNICIAN_REASSIGNED,
+            description=f"Reassigned to technician {tech.first_name} {tech.last_name[:1]}; a new visit time is needed.",
+            technician_id=tech.id,
+        )
+        request.assigned_at = _now()
+        return _commit(db, request)
 
     if request.status is S.ASSIGNED:
         if request.assigned_technician_id == tech.id:
@@ -411,11 +457,34 @@ def customer_decision(
 
 def cancel(db: Session, *, request: ServiceRequest, actor: User, note: str | None) -> ServiceRequest:
     who = "the customer" if actor.role is UserRole.CUSTOMER else "an administrator"
+    _check(request, S.CANCELLED, actor)
+    scheduling_service.cancel_active_appointment(db, request, actor, "Visit cancelled with the claim.")
     _transition(
         db, request, S.CANCELLED, actor,
         event_type=activity.REQUEST_CANCELLED, description=f"Request cancelled by {who}.",
     )
     request.status_reason = note
+    return _commit(db, request)
+
+
+def request_info(db: Session, *, request: ServiceRequest, admin: User, reason: str) -> ServiceRequest:
+    """Ask the customer for more information (UNDER_REVIEW -> NEEDS_INFO)."""
+    _transition(
+        db, request, S.NEEDS_INFO, admin,
+        event_type=activity.INFO_REQUESTED, description="More information was requested from the customer.",
+    )
+    request.info_request_note = reason
+    request.info_response_note = None
+    return _commit(db, request)
+
+
+def provide_info(db: Session, *, request: ServiceRequest, customer: User, note: str) -> ServiceRequest:
+    """Customer answers; the claim goes back to review (NEEDS_INFO -> UNDER_REVIEW)."""
+    _transition(
+        db, request, S.UNDER_REVIEW, customer,
+        event_type=activity.INFO_PROVIDED, description="The customer provided the requested information.",
+    )
+    request.info_response_note = note
     return _commit(db, request)
 
 
@@ -488,6 +557,7 @@ def _is_staff(user: User) -> bool:
 
 def list_row(request: ServiceRequest, viewer: User) -> ServiceRequestListOut:
     tech = request.assigned_technician
+    appointment = request.active_appointment
     return ServiceRequestListOut(
         id=request.id,
         status=request.status,
@@ -496,6 +566,8 @@ def list_row(request: ServiceRequest, viewer: User) -> ServiceRequestListOut:
         updated_at=request.updated_at,
         ac_unit=AcUnitBrief.model_validate(request.ac_unit),
         technician=TechnicianBrief.model_validate(tech) if tech else None,
+        timezone=state_timezone(request.ac_unit.state),
+        appointment=AppointmentOut.model_validate(appointment) if appointment else None,
         customer=UserSummary.model_validate(request.customer) if _is_staff(viewer) else None,
     )
 
@@ -523,6 +595,9 @@ def detail(db: Session, request: ServiceRequest, viewer: User) -> ServiceRequest
         work_performed=request.work_performed,
         parts_used=request.parts_used,
         customer_decision_note=request.customer_decision_note,
+        info_request_note=request.info_request_note,
+        info_response_note=request.info_response_note,
+        preferred_windows=request.preferred_windows or [],
         reviewed_at=request.reviewed_at,
         decided_at=request.decided_at,
         assigned_at=request.assigned_at,

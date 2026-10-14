@@ -31,9 +31,10 @@ export function RequestStatusBadge({
 /* The normal path through the lifecycle, used for the progress stepper. */
 const STEPS: { label: string; statuses: ServiceRequestStatus[] }[] = [
   { label: "Submitted", statuses: ["SUBMITTED"] },
-  { label: "Review", statuses: ["UNDER_REVIEW"] },
+  { label: "Review", statuses: ["UNDER_REVIEW", "NEEDS_INFO"] },
   { label: "Approved", statuses: ["APPROVED"] },
   { label: "Technician assigned", statuses: ["ASSIGNED"] },
+  { label: "Visit scheduled", statuses: ["SCHEDULED"] },
   { label: "Inspection", statuses: ["INSPECTION_IN_PROGRESS", "AWAITING_CUSTOMER_APPROVAL"] },
   { label: "Repair", statuses: ["IN_PROGRESS"] },
   { label: "Completed", statuses: ["COMPLETED"] },
@@ -47,7 +48,7 @@ export function RequestProgress({ status }: { status: ServiceRequestStatus }) {
   const done = status === "COMPLETED";
 
   return (
-    <ol className="grid gap-3 sm:grid-cols-7 sm:gap-2" aria-label="Request progress">
+    <ol className="grid gap-3 sm:grid-cols-8 sm:gap-2" aria-label="Claim progress">
       {STEPS.map((step, index) => {
         const complete = index < current || done;
         const active = index === current && !done;

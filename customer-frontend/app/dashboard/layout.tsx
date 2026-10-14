@@ -18,7 +18,7 @@ const TABS = [
   { href: "/dashboard", label: "Overview", icon: HomeIcon },
   { href: "/dashboard/my-plan", label: "My Plan", icon: ShieldIcon },
   { href: "/dashboard/ac-units", label: "AC Units", icon: SnowflakeIcon },
-  { href: "/dashboard/service-requests", label: "Service Requests", icon: ClipboardIcon },
+  { href: "/dashboard/service-requests", label: "Claims", icon: ClipboardIcon },
   { href: "/dashboard/purchases", label: "My Purchases", icon: ReceiptIcon },
   { href: "/dashboard/profile", label: "Profile", icon: UserIcon },
 ];

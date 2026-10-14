@@ -17,10 +17,15 @@ import {
 import { SearchInput, Select } from "@/components/form";
 import { ChevronRightIcon, WrenchIcon } from "@/components/icons";
 import { ServiceStatusBadge } from "@/components/service-ui";
-import { Alert, Avatar, PageHeader } from "@/components/ui";
+import { Alert, Avatar, Button, PageHeader } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { cx, formatDate } from "@/lib/format";
-import { SERVICE_TYPE_LABELS, SR_STATUS_LABELS, SR_STATUSES } from "@/lib/service-format";
+import {
+  formatInZone,
+  SERVICE_TYPE_LABELS,
+  SR_STATUS_LABELS,
+  SR_STATUSES,
+} from "@/lib/service-format";
 import { fetchServiceRequests } from "@/services/serviceRequestService";
 import type { ServiceRequestListItem, ServiceRequestStatus } from "@/types";
 
@@ -28,9 +33,13 @@ import type { ServiceRequestListItem, ServiceRequestStatus } from "@/types";
 const QUICK: { value: ServiceRequestStatus | ""; label: string }[] = [
   { value: "SUBMITTED", label: "New" },
   { value: "UNDER_REVIEW", label: "Under review" },
+  { value: "NEEDS_INFO", label: "More info" },
   { value: "APPROVED", label: "Needs technician" },
+  { value: "SCHEDULED", label: "Scheduled" },
   { value: "", label: "All" },
 ];
+
+const PAGE_SIZE = 50;
 
 const NEEDS_ACTION: ServiceRequestStatus[] = ["SUBMITTED", "UNDER_REVIEW", "APPROVED"];
 
@@ -46,6 +55,7 @@ function ServiceRequestList() {
   const [requests, setRequests] = useState<ServiceRequestListItem[]>([]);
   const [status, setStatus] = useState<ServiceRequestStatus | "">("SUBMITTED");
   const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,19 +63,29 @@ function ServiceRequestList() {
     const timer = setTimeout(() => {
       setLoading(true);
       setError(null);
-      fetchServiceRequests({ status, search: search.trim() || undefined })
+      fetchServiceRequests({
+        status,
+        search: search.trim() || undefined,
+        limit: PAGE_SIZE,
+        offset,
+      })
         .then(setRequests)
         .catch((err) => setError(errorMessage(err)))
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [status, search]);
+  }, [status, search, offset]);
+
+  function changeStatus(value: ServiceRequestStatus | "") {
+    setStatus(value);
+    setOffset(0);
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Service requests"
-        description="Review new requests, approve or reject them, and assign a technician. Open a request to see photos, the technician's report and its full history."
+        title="Claims"
+        description="Review new claims, ask customers for more information, approve or reject them, and schedule a technician visit. Open a claim to see photos, the technician's report and its full history."
       />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -84,7 +104,7 @@ function ServiceRequestList() {
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => setStatus(option.value)}
+                    onClick={() => changeStatus(option.value)}
                     className={cx(
                       "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                       selected
@@ -101,7 +121,7 @@ function ServiceRequestList() {
           <Select
             aria-label="Filter by any status"
             value={status}
-            onChange={(event) => setStatus(event.target.value as ServiceRequestStatus | "")}
+            onChange={(event) => changeStatus(event.target.value as ServiceRequestStatus | "")}
             className="sm:w-56"
           >
             <option value="">All statuses</option>
@@ -114,9 +134,12 @@ function ServiceRequestList() {
         </div>
         <SearchInput
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setOffset(0);
+          }}
           placeholder="Search customer, email or AC brand/model"
-          aria-label="Search service requests"
+          aria-label="Search claims"
           className="w-full lg:w-80"
         />
       </div>
@@ -124,13 +147,35 @@ function ServiceRequestList() {
       {error ? <Alert>{error}</Alert> : null}
 
       {loading ? (
-        <TableSkeleton columns={7} />
+        <TableSkeleton columns={8} />
       ) : (
         <TableCard
           footer={
-            requests.length > 0
-              ? `${requests.length} request${requests.length === 1 ? "" : "s"}`
-              : undefined
+            requests.length > 0 || offset > 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  Showing {requests.length === 0 ? 0 : offset + 1}�{offset + requests.length}
+                </span>
+                <span className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={offset === 0}
+                    onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={requests.length < PAGE_SIZE}
+                    onClick={() => setOffset(offset + PAGE_SIZE)}
+                  >
+                    Next
+                  </Button>
+                </span>
+              </div>
+            ) : undefined
           }
         >
           <THead>
@@ -140,6 +185,7 @@ function ServiceRequestList() {
             <Th>Issue</Th>
             <Th>Status</Th>
             <Th>Technician</Th>
+            <Th>Visit</Th>
             <Th>Submitted</Th>
             <Th>
               <span className="sr-only">Actions</span>
@@ -148,8 +194,8 @@ function ServiceRequestList() {
           <TBody>
             {requests.length === 0 ? (
               <TableEmpty
-                colSpan={8}
-                message="No service requests match these filters."
+                colSpan={9}
+                message="No claims match these filters."
                 icon={<WrenchIcon className="h-5 w-5" />}
               />
             ) : (
@@ -191,6 +237,11 @@ function ServiceRequestList() {
                     <Td className="text-slate-600">
                       {request.technician
                         ? `${request.technician.first_name} ${request.technician.last_name}`
+                        : "—"}
+                    </Td>
+                    <Td className="whitespace-nowrap text-slate-600">
+                      {request.appointment
+                        ? formatInZone(request.appointment.start_at, request.appointment.timezone)
                         : "—"}
                     </Td>
                     <Td className="text-slate-500">{formatDate(request.created_at)}</Td>

@@ -46,6 +46,11 @@ class Plan(Base):
     max_ac_units: Mapped[int] = mapped_column(
         Integer, default=1, server_default="1", nullable=False
     )
+    # Coverage rules. NULL means "not restricted" - the business has not
+    # defined limits yet. A list restricts claims to those AcType / ServiceType
+    # values.
+    covered_ac_types: Mapped[list[str] | None] = mapped_column(JSON)
+    covered_service_types: Mapped[list[str] | None] = mapped_column(JSON)
 
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,

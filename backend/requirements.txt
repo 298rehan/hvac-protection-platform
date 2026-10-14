@@ -29,3 +29,6 @@ Jinja2==3.1.6
 # --- AWS (S3 photo storage, DynamoDB activity history) ---------------------
 # Credentials come from the EC2 instance role or a local AWS profile - never code.
 boto3==1.43.112
+
+# Time-zone database for appointment times (slim images lack system tz data).
+tzdata==2026.3

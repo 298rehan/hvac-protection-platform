@@ -32,7 +32,7 @@ interface NavItem {
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: GridIcon, match: (p) => p === "/" },
-  { href: "/service-requests", label: "Service Requests", icon: WrenchIcon },
+  { href: "/service-requests", label: "Claims", icon: WrenchIcon },
   { href: "/customers", label: "Customers", icon: UsersIcon },
   { href: "/technicians", label: "Technicians", icon: ShieldIcon },
   { href: "/plans", label: "Plans", icon: LayersIcon },

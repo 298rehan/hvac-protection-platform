@@ -12,16 +12,19 @@ from app.models import ServiceRequestStatus
 from app.schemas.photo import PhotoUploadResponse, ServiceRequestPhotoUploadRequest
 from app.schemas.service_request import (
     ActivityEventOut,
+    AppointmentIn,
     AssignIn,
     CustomerDecisionIn,
+    EligibleTechnicianOut,
     NoteIn,
+    ProvideInfoIn,
     ReasonIn,
     ReportUpdate,
     ServiceRequestCreate,
     ServiceRequestDetailOut,
     ServiceRequestListOut,
 )
-from app.services import activity, photo_service
+from app.services import activity, notifications, photo_service, scheduling_service
 from app.services import service_request_service as svc
 
 router = APIRouter(prefix="/api/service-requests", tags=["Service Requests"])
@@ -70,6 +73,23 @@ def customer_decision(
     request = svc.customer_decision(
         db, request=request, customer=customer, approve=payload.approve, note=payload.note
     )
+    return _done(db, request, customer, background)
+
+
+@router.post(
+    "/{request_id}/provide-info",
+    response_model=ServiceRequestDetailOut,
+    summary="Answer an information request (customer)",
+)
+def provide_info(
+    request_id: int,
+    payload: ProvideInfoIn,
+    db: DbSession,
+    customer: CustomerUser,
+    background: BackgroundTasks,
+):
+    request = svc.get_for_viewer(db, request_id, customer, lock=True)
+    request = svc.provide_info(db, request=request, customer=customer, note=payload.note)
     return _done(db, request, customer, background)
 
 
@@ -207,6 +227,56 @@ def reject(
 ):
     request = svc.get_for_viewer(db, request_id, admin, lock=True)
     request = svc.reject(db, request=request, admin=admin, reason=payload.reason)
+    return _done(db, request, admin, background)
+
+
+@router.post(
+    "/{request_id}/request-info",
+    response_model=ServiceRequestDetailOut,
+    summary="Ask the customer for more information (admin)",
+)
+def request_info(
+    request_id: int, payload: ReasonIn, db: DbSession, admin: AdminUser, background: BackgroundTasks
+):
+    request = svc.get_for_viewer(db, request_id, admin, lock=True)
+    request = svc.request_info(db, request=request, admin=admin, reason=payload.reason)
+    return _done(db, request, admin, background)
+
+
+@router.get(
+    "/{request_id}/eligible-technicians",
+    response_model=list[EligibleTechnicianOut],
+    summary="Technicians who serve this claim's location, best match first (admin)",
+)
+def eligible_technicians(request_id: int, db: DbSession, admin: AdminUser):
+    request = svc.get_for_viewer(db, request_id, admin)
+    return scheduling_service.eligible_technicians(db, request)
+
+
+@router.post(
+    "/{request_id}/appointment",
+    response_model=ServiceRequestDetailOut,
+    summary="Assign a technician and confirm a visit time (admin)",
+)
+def schedule_appointment(
+    request_id: int, payload: AppointmentIn, db: DbSession, admin: AdminUser, background: BackgroundTasks
+):
+    """Times are in the property's local time zone. Rejects overlapping visits."""
+    request = svc.get_for_viewer(db, request_id, admin, lock=True)
+    request, appointment = scheduling_service.schedule(db, request=request, admin=admin, payload=payload)
+    unit, tech, customer = request.ac_unit, appointment.technician, request.customer
+    background.add_task(
+        notifications.send_appointment_confirmed_emails,
+        claim_id=request.id,
+        visit_time=scheduling_service.format_local(appointment.start_at, appointment.timezone),
+        address=f"{unit.address}, {unit.city}, {unit.state} {unit.zip_code}",
+        equipment=f"{unit.brand} {unit.model_number}",
+        technician_name=f"{tech.first_name} {tech.last_name}",
+        technician_email=tech.email,
+        technician_first_name=tech.first_name,
+        customer_email=customer.email,
+        customer_first_name=customer.first_name,
+    )
     return _done(db, request, admin, background)
 
 

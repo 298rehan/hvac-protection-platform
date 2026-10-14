@@ -27,7 +27,7 @@ import {
 } from "@/components/ui";
 import { ApiError, errorMessage } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import { isTerminal, REPORT_EDITABLE, SERVICE_TYPE_LABELS } from "@/lib/service-format";
+import { formatVisit, isTerminal, REPORT_EDITABLE, SERVICE_TYPE_LABELS } from "@/lib/service-format";
 import {
   completeJob,
   fetchHistory,
@@ -180,6 +180,16 @@ function JobDetail() {
       {notice ? <Alert tone="success">{notice}</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}
 
+      {job.appointment ? (
+        <p className="rounded-lg bg-teal-50 px-4 py-3 text-sm text-teal-900 ring-1 ring-teal-200">
+          Confirmed visit:{" "}
+          <span className="font-semibold">
+            {formatVisit(job.appointment.start_at, job.appointment.end_at, job.timezone)}
+          </span>{" "}
+          <span className="text-teal-800">(property local time)</span>
+        </p>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
           <RequestIssue request={job} />
@@ -210,7 +220,7 @@ function JobDetail() {
                 </div>
               </form>
             </Card>
-          ) : status !== "ASSIGNED" ? (
+          ) : status !== "ASSIGNED" && status !== "SCHEDULED" ? (
             <Card>
               <CardHeader title="Service report" />
               <div className="space-y-5 px-5 py-5">
@@ -234,7 +244,7 @@ function JobDetail() {
                 />
               ) : (
                 <p className="text-sm text-slate-500">
-                  {status === "ASSIGNED"
+                  {status === "ASSIGNED" || status === "SCHEDULED"
                     ? "Start the inspection to add photos."
                     : "Photos can no longer be added to this job."}
                 </p>
@@ -255,7 +265,7 @@ function JobDetail() {
                   Save the report before moving the job on.
                 </p>
               ) : null}
-              {status === "ASSIGNED" ? (
+              {status === "ASSIGNED" || status === "SCHEDULED" ? (
                 <Button
                   disabled={busy}
                   onClick={() =>
@@ -372,7 +382,9 @@ function JobDetail() {
 function nextStepHint(job: ServiceRequestDetail, afterPhotos: number): string {
   switch (job.status) {
     case "ASSIGNED":
-      return "Start the inspection when you arrive on site.";
+      return "No visit time is booked yet. Start the inspection when you arrive on site.";
+    case "SCHEDULED":
+      return "Start the inspection when you arrive for the confirmed visit.";
     case "INSPECTION_IN_PROGRESS":
       return job.inspection_findings
         ? "Start the repair, ask the customer to approve extra work, or complete the job if no repair is needed."

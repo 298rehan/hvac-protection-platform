@@ -2,6 +2,8 @@ import { api } from "@/lib/api";
 import type {
   AcUnit,
   ActivityEvent,
+  AppointmentPayload,
+  EligibleTechnician,
   Photo,
   PhotoCategory,
   PhotoUploadTicket,
@@ -11,6 +13,7 @@ import type {
   ServiceRequestStatus,
   Technician,
   TechnicianPayload,
+  TechnicianProfilePayload,
 } from "@/types";
 
 /*
@@ -26,11 +29,15 @@ export function fetchServiceRequests(params: {
   status?: ServiceRequestStatus | "";
   search?: string;
   technicianId?: number;
+  limit?: number;
+  offset?: number;
 } = {}): Promise<ServiceRequestListItem[]> {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
   if (params.search) query.set("search", params.search);
   if (params.technicianId) query.set("technician_id", String(params.technicianId));
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
   const suffix = query.toString() ? `?${query}` : "";
   return api.get<ServiceRequestListItem[]>(`/api/service-requests${suffix}`);
 }
@@ -49,6 +56,19 @@ export function rejectRequest(id: number, reason: string) {
 
 export function assignTechnician(id: number, technicianId: number) {
   return api.post<ServiceRequestDetail>(`${base(id)}/assign`, { technician_id: technicianId });
+}
+
+export function requestMoreInfo(id: number, reason: string) {
+  return api.post<ServiceRequestDetail>(`${base(id)}/request-info`, { reason });
+}
+
+export function fetchEligibleTechnicians(id: number) {
+  return api.get<EligibleTechnician[]>(`${base(id)}/eligible-technicians`);
+}
+
+/** Assign (if needed) and confirm a visit. Date/time are in the property's time zone. */
+export function scheduleAppointment(id: number, payload: AppointmentPayload) {
+  return api.post<ServiceRequestDetail>(`${base(id)}/appointment`, payload);
 }
 
 export function cancelRequest(id: number, note?: string) {
@@ -107,6 +127,10 @@ export function updateTechnician(
   payload: { is_active?: boolean; phone?: string | null },
 ) {
   return api.patch<Technician>(`/api/technicians/${id}`, payload);
+}
+
+export function updateTechnicianProfile(id: number, payload: TechnicianProfilePayload) {
+  return api.put<Technician>(`/api/technicians/${id}/profile`, payload);
 }
 
 /* ------------------------------ AC units ------------------------------ */

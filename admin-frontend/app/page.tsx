@@ -58,7 +58,7 @@ function NewServiceRequestsBanner() {
         <WrenchIcon className="h-5 w-5 text-sky-500" />
         <span>
           <strong className="font-semibold">
-            {count} new service request{count === 1 ? "" : "s"}
+            {count} new claim{count === 1 ? "" : "s"}
           </strong>{" "}
           waiting for review.
         </span>
@@ -67,7 +67,7 @@ function NewServiceRequestsBanner() {
         href="/service-requests"
         className="inline-flex items-center gap-1 pl-8 text-sm font-semibold text-sky-900 hover:text-sky-950 sm:pl-0"
       >
-        Review requests
+        Review claims
         <ArrowRightIcon className="h-4 w-4" />
       </Link>
     </div>

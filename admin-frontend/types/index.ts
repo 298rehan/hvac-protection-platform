@@ -69,6 +69,9 @@ export interface Plan {
   is_active: boolean;
   display_order: number;
   max_ac_units: number;
+  /** null = not restricted (coverage rules not defined). */
+  covered_ac_types: AcType[] | null;
+  covered_service_types: ServiceType[] | null;
   created_at: string;
   updated_at: string;
   regions: PlanRegion[];
@@ -90,6 +93,8 @@ export interface PlanPayload {
   is_active: boolean;
   display_order: number;
   max_ac_units: number;
+  covered_ac_types: AcType[] | null;
+  covered_service_types: ServiceType[] | null;
   regions: PlanRegionInput[];
 }
 
@@ -99,6 +104,9 @@ export interface PurchasePlanRef {
   slug: string;
   description: string;
   features: string[];
+  max_ac_units?: number;
+  covered_ac_types?: AcType[] | null;
+  covered_service_types?: ServiceType[] | null;
 }
 
 export interface Purchase {
@@ -173,7 +181,9 @@ export type ServiceRequestStatus =
   | "AWAITING_CUSTOMER_APPROVAL"
   | "IN_PROGRESS"
   | "COMPLETED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "NEEDS_INFO"
+  | "SCHEDULED";
 
 export type ServiceType =
   | "ROUTINE_MAINTENANCE"
@@ -182,7 +192,9 @@ export type ServiceType =
   | "WATER_LEAK"
   | "STRANGE_NOISE"
   | "VISIBLE_DAMAGE"
-  | "OTHER";
+  | "OTHER"
+  | "SYSTEM_NOT_STARTING"
+  | "THERMOSTAT_ISSUE";
 
 export type AcType =
   | "CENTRAL_SPLIT"
@@ -191,7 +203,8 @@ export type AcType =
   | "PACKAGED"
   | "WINDOW"
   | "PORTABLE"
-  | "OTHER";
+  | "OTHER"
+  | "FURNACE";
 
 export type ReportedCondition = "GOOD" | "FAIR" | "POOR" | "NOT_WORKING" | "UNKNOWN";
 
@@ -244,6 +257,23 @@ export interface TechnicianBrief {
   phone: string | null;
 }
 
+export type PreferredWindowName = "MORNING" | "AFTERNOON" | "EVENING";
+
+export interface PreferredWindow {
+  date: string;
+  window: PreferredWindowName;
+}
+
+export interface Appointment {
+  id: number;
+  technician: TechnicianBrief;
+  /** UTC ISO timestamps; display in `timezone`. */
+  start_at: string;
+  end_at: string;
+  timezone: string;
+  status: "CONFIRMED" | "CANCELLED";
+}
+
 export interface ServiceRequestListItem {
   id: number;
   status: ServiceRequestStatus;
@@ -252,6 +282,9 @@ export interface ServiceRequestListItem {
   updated_at: string;
   ac_unit: AcUnitBrief;
   technician: TechnicianBrief | null;
+  /** Property's IANA time zone. */
+  timezone: string;
+  appointment: Appointment | null;
   /** Present on staff views only. */
   customer: CustomerSummary | null;
 }
@@ -264,6 +297,9 @@ export interface ServiceRequestDetail extends ServiceRequestListItem {
   work_performed: string | null;
   parts_used: string | null;
   customer_decision_note: string | null;
+  info_request_note: string | null;
+  info_response_note: string | null;
+  preferred_windows: PreferredWindow[];
   reviewed_at: string | null;
   decided_at: string | null;
   assigned_at: string | null;
@@ -310,6 +346,38 @@ export interface Technician {
   is_active: boolean;
   created_at: string;
   open_jobs: number;
+  service_states: string[];
+  service_zip_prefixes: string[];
+  specialties: AcType[];
+}
+
+export interface TechnicianProfilePayload {
+  service_states: string[];
+  service_zip_prefixes: string[];
+  specialties: AcType[];
+}
+
+export interface EligibleTechnician {
+  id: number;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  service_states: string[];
+  service_zip_prefixes: string[];
+  specialties: AcType[];
+  area_match: "zip" | "state";
+  specialty_match: boolean;
+  open_jobs: number;
+  free_preferred_windows: PreferredWindow[];
+  upcoming_appointments: { start_at: string; end_at: string }[];
+}
+
+export interface AppointmentPayload {
+  technician_id: number;
+  /** YYYY-MM-DD and HH:MM in the property's local time zone. */
+  date: string;
+  start_time: string;
+  duration_minutes: number;
 }
 
 export interface TechnicianPayload {

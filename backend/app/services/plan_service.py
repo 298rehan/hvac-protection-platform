@@ -62,6 +62,13 @@ def _replace_regions(db: Session, plan: Plan, regions: list[PlanRegionIn]) -> No
         )
 
 
+def _coverage(values) -> list[str] | None:
+    """Store enum lists as plain strings; None means not restricted."""
+    if values is None:
+        return None
+    return list(dict.fromkeys(getattr(v, "value", v) for v in values))
+
+
 # --- Admin CRUD ------------------------------------------------------------
 
 
@@ -77,6 +84,8 @@ def create_plan(db: Session, payload: PlanCreate) -> Plan:
         is_active=payload.is_active,
         display_order=payload.display_order,
         max_ac_units=payload.max_ac_units,
+        covered_ac_types=_coverage(payload.covered_ac_types),
+        covered_service_types=_coverage(payload.covered_service_types),
     )
     _replace_regions(db, plan, payload.regions)
     db.add(plan)
@@ -108,6 +117,11 @@ def update_plan(db: Session, plan: Plan, payload: PlanUpdate) -> Plan:
                   "is_active", "display_order", "max_ac_units"):
         if field in data and data[field] is not None:
             setattr(plan, field, data[field])
+
+    # Coverage lists may be set to null on purpose (= not restricted).
+    for field in ("covered_ac_types", "covered_service_types"):
+        if field in data:
+            setattr(plan, field, _coverage(data[field]))
 
     if "regions" in data and payload.regions is not None:
         _replace_regions(db, plan, payload.regions)
@@ -162,6 +176,8 @@ def to_public(plan: Plan, state_code: str) -> PlanPublicOut:
         features=plan.features or [],
         display_order=plan.display_order,
         max_ac_units=plan.max_ac_units,
+        covered_ac_types=plan.covered_ac_types,
+        covered_service_types=plan.covered_service_types,
         state_code=state_code.upper(),
         state_name=state_name(state_code),
         monthly_price=monthly,

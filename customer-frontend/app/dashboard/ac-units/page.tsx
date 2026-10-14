@@ -112,7 +112,7 @@ export default function AcUnitsPage() {
                     )}
                     {unit.has_open_request ? (
                       <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-800 ring-1 ring-amber-200">
-                        Service request open
+                        Claim open
                       </span>
                     ) : null}
                     <span className="rounded-full bg-slate-50 px-2.5 py-1 font-medium text-slate-600 ring-1 ring-slate-200">

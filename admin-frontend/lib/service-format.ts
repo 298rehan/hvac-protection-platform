@@ -1,6 +1,8 @@
 import type {
   AcType,
   PhotoCategory,
+  PreferredWindow,
+  PreferredWindowName,
   ReportedCondition,
   ServiceRequestStatus,
   ServiceType,
@@ -19,6 +21,8 @@ export const SR_STATUS_LABELS: Record<ServiceRequestStatus, string> = {
   IN_PROGRESS: "Repair in progress",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
+  NEEDS_INFO: "More info required",
+  SCHEDULED: "Scheduled",
 };
 
 export const SR_STATUS_STYLES: Record<ServiceRequestStatus, string> = {
@@ -32,6 +36,8 @@ export const SR_STATUS_STYLES: Record<ServiceRequestStatus, string> = {
   IN_PROGRESS: "bg-cyan-50 text-cyan-800 ring-cyan-200",
   COMPLETED: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   CANCELLED: "bg-slate-100 text-slate-600 ring-slate-200",
+  NEEDS_INFO: "bg-yellow-50 text-yellow-800 ring-yellow-200",
+  SCHEDULED: "bg-teal-50 text-teal-800 ring-teal-200",
 };
 
 export const SR_STATUS_DOTS: Record<ServiceRequestStatus, string> = {
@@ -45,9 +51,25 @@ export const SR_STATUS_DOTS: Record<ServiceRequestStatus, string> = {
   IN_PROGRESS: "bg-cyan-500",
   COMPLETED: "bg-emerald-500",
   CANCELLED: "bg-slate-400",
+  NEEDS_INFO: "bg-yellow-500",
+  SCHEDULED: "bg-teal-500",
 };
 
-export const SR_STATUSES = Object.keys(SR_STATUS_LABELS) as ServiceRequestStatus[];
+/** Lifecycle order, used for filters. */
+export const SR_STATUSES: ServiceRequestStatus[] = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "NEEDS_INFO",
+  "APPROVED",
+  "ASSIGNED",
+  "SCHEDULED",
+  "INSPECTION_IN_PROGRESS",
+  "AWAITING_CUSTOMER_APPROVAL",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "REJECTED",
+  "CANCELLED",
+];
 
 export const TERMINAL_STATUSES: ServiceRequestStatus[] = ["REJECTED", "COMPLETED", "CANCELLED"];
 
@@ -70,6 +92,8 @@ export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   STRANGE_NOISE: "Strange noise",
   VISIBLE_DAMAGE: "Visible damage",
   OTHER: "Other",
+  SYSTEM_NOT_STARTING: "System not starting",
+  THERMOSTAT_ISSUE: "Thermostat / controls",
 };
 
 export const AC_TYPE_LABELS: Record<AcType, string> = {
@@ -80,6 +104,7 @@ export const AC_TYPE_LABELS: Record<AcType, string> = {
   WINDOW: "Window unit",
   PORTABLE: "Portable unit",
   OTHER: "Other",
+  FURNACE: "Furnace / heating system",
 };
 
 export const CONDITION_LABELS: Record<ReportedCondition, string> = {
@@ -102,4 +127,67 @@ export function formatBytes(bytes: number | null | undefined): string {
   if (!bytes) return "—";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export const PREFERRED_WINDOW_LABELS: Record<PreferredWindowName, string> = {
+  MORNING: "Morning (8am–12pm)",
+  AFTERNOON: "Afternoon (12–4pm)",
+  EVENING: "Evening (4–7pm)",
+};
+
+/** Default visit start (local time) when booking from a preferred window. */
+export const PREFERRED_WINDOW_START: Record<PreferredWindowName, string> = {
+  MORNING: "08:00",
+  AFTERNOON: "12:00",
+  EVENING: "16:00",
+};
+
+/** "Tue 21 Oct" for a YYYY-MM-DD date, without time-zone shifting. */
+export function formatWindowDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+export function formatPreferredWindow(window: PreferredWindow): string {
+  return `${formatWindowDate(window.date)} · ${PREFERRED_WINDOW_LABELS[window.window]}`;
+}
+
+/** Format a UTC timestamp in the property's time zone, e.g. "Tue 21 Oct, 10:00 AM CDT". */
+export function formatInZone(iso: string, timeZone: string, withDate = true): string {
+  return new Intl.DateTimeFormat("en-US", {
+    ...(withDate ? { weekday: "short", day: "numeric", month: "short" } : {}),
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+    timeZoneName: "short",
+  }).format(new Date(iso));
+}
+
+/** "Tue 21 Oct, 10:00 AM – 12:00 PM CDT" for an appointment. */
+export function formatVisit(startIso: string, endIso: string, timeZone: string): string {
+  const end = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+    timeZoneName: "short",
+  }).format(new Date(endIso));
+  const start = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(new Date(startIso));
+  return `${start} – ${end}`;
+}
+
+/** Today's date (YYYY-MM-DD) in a time zone, for date-input minimums. */
+export function todayInZone(timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
 }

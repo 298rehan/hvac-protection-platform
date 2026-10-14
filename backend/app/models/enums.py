@@ -46,6 +46,7 @@ class AcType(str, Enum):
     WINDOW = "WINDOW"
     PORTABLE = "PORTABLE"
     OTHER = "OTHER"
+    FURNACE = "FURNACE"
 
 
 class ReportedCondition(str, Enum):
@@ -69,6 +70,8 @@ class ServiceType(str, Enum):
     STRANGE_NOISE = "STRANGE_NOISE"
     VISIBLE_DAMAGE = "VISIBLE_DAMAGE"
     OTHER = "OTHER"
+    SYSTEM_NOT_STARTING = "SYSTEM_NOT_STARTING"
+    THERMOSTAT_ISSUE = "THERMOSTAT_ISSUE"
 
 
 # Service types where photos help the review. The customer app asks for them;
@@ -87,6 +90,9 @@ class ServiceRequestStatus(str, Enum):
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+    # Added later; kept at the end so the MySQL ENUM change is a pure append.
+    NEEDS_INFO = "NEEDS_INFO"  # "More information required" from the customer
+    SCHEDULED = "SCHEDULED"  # technician assigned and appointment confirmed
 
 
 TERMINAL_SERVICE_REQUEST_STATUSES = frozenset(
@@ -102,6 +108,9 @@ _C, _A, _T = UserRole.CUSTOMER, UserRole.ADMIN, UserRole.TECHNICIAN
 # required notes and photos).
 SERVICE_REQUEST_TRANSITIONS: dict[tuple[ServiceRequestStatus, ServiceRequestStatus], frozenset[UserRole]] = {
     (_S.SUBMITTED, _S.UNDER_REVIEW): frozenset({_A}),
+    (_S.UNDER_REVIEW, _S.NEEDS_INFO): frozenset({_A}),
+    (_S.NEEDS_INFO, _S.UNDER_REVIEW): frozenset({_C}),
+    (_S.NEEDS_INFO, _S.CANCELLED): frozenset({_C, _A}),
     (_S.SUBMITTED, _S.CANCELLED): frozenset({_C, _A}),
     (_S.UNDER_REVIEW, _S.APPROVED): frozenset({_A}),
     (_S.UNDER_REVIEW, _S.REJECTED): frozenset({_A}),
@@ -110,6 +119,10 @@ SERVICE_REQUEST_TRANSITIONS: dict[tuple[ServiceRequestStatus, ServiceRequestStat
     (_S.APPROVED, _S.CANCELLED): frozenset({_C, _A}),
     (_S.ASSIGNED, _S.INSPECTION_IN_PROGRESS): frozenset({_T}),
     (_S.ASSIGNED, _S.CANCELLED): frozenset({_A}),
+    (_S.ASSIGNED, _S.SCHEDULED): frozenset({_A}),
+    (_S.SCHEDULED, _S.ASSIGNED): frozenset({_A}),  # appointment cancelled / reassigned
+    (_S.SCHEDULED, _S.INSPECTION_IN_PROGRESS): frozenset({_T}),
+    (_S.SCHEDULED, _S.CANCELLED): frozenset({_A}),
     (_S.INSPECTION_IN_PROGRESS, _S.AWAITING_CUSTOMER_APPROVAL): frozenset({_T}),
     (_S.INSPECTION_IN_PROGRESS, _S.IN_PROGRESS): frozenset({_T}),
     (_S.INSPECTION_IN_PROGRESS, _S.COMPLETED): frozenset({_T}),
@@ -130,6 +143,26 @@ class PhotoCategory(str, Enum):
     INSPECTION = "INSPECTION"
     BEFORE = "BEFORE"
     AFTER = "AFTER"
+
+
+class PreferredWindow(str, Enum):
+    """Customer's preferred visit window, in the property's local time."""
+
+    MORNING = "MORNING"  # 08:00-12:00
+    AFTERNOON = "AFTERNOON"  # 12:00-16:00
+    EVENING = "EVENING"  # 16:00-19:00
+
+
+PREFERRED_WINDOW_HOURS: dict[PreferredWindow, tuple[int, int]] = {
+    PreferredWindow.MORNING: (8, 12),
+    PreferredWindow.AFTERNOON: (12, 16),
+    PreferredWindow.EVENING: (16, 19),
+}
+
+
+class AppointmentStatus(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
 
 
 class PhotoStatus(str, Enum):

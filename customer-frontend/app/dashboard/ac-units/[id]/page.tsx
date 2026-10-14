@@ -118,10 +118,10 @@ export default function AcUnitDetailPage() {
         description={AC_TYPE_LABELS[unit.ac_type]}
         actions={
           onCurrentPlan && !unit.has_open_request ? (
-            <ButtonLink href={`/dashboard/service-requests/new?ac=${unit.id}`}>Request service</ButtonLink>
+            <ButtonLink href={`/dashboard/service-requests/new?ac=${unit.id}`}>File a claim</ButtonLink>
           ) : unit.has_open_request ? (
             <ButtonLink href="/dashboard/service-requests" variant="secondary">
-              View open request
+              View open claim
             </ButtonLink>
           ) : null
         }

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { formatDate, formatMoney } from "@/lib/format";
+import { AC_TYPE_LABELS, SERVICE_TYPE_LABELS } from "@/lib/service-format";
 import { fetchPlan } from "@/services/adminService";
 import type { Plan } from "@/types";
 
@@ -130,6 +131,16 @@ function PlanDetail() {
             </DetailRow>
             <DetailRow label="Display order">{plan.display_order}</DetailRow>
             <DetailRow label="AC units covered">{plan.max_ac_units}</DetailRow>
+            <DetailRow label="Covered equipment">
+              {plan.covered_ac_types === null
+                ? "Not restricted"
+                : plan.covered_ac_types.map((t) => AC_TYPE_LABELS[t]).join(", ")}
+            </DetailRow>
+            <DetailRow label="Covered issues">
+              {plan.covered_service_types === null
+                ? "Not restricted"
+                : plan.covered_service_types.map((t) => SERVICE_TYPE_LABELS[t]).join(", ")}
+            </DetailRow>
             <DetailRow label="Created">{formatDate(plan.created_at)}</DetailRow>
             <DetailRow label="Last updated">{formatDate(plan.updated_at)}</DetailRow>
           </dl>

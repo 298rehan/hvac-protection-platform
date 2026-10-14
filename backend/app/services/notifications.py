@@ -170,3 +170,48 @@ def send_admin_new_purchase_email(
         state_name=state_name(state_code),
         submitted_at=format_datetime(submitted_at),
     )
+
+
+# --- Appointments -----------------------------------------------------------
+
+
+def send_appointment_confirmed_emails(
+    *,
+    claim_id: int,
+    visit_time: str,
+    address: str,
+    equipment: str,
+    technician_name: str,
+    technician_email: str,
+    technician_first_name: str,
+    customer_email: str,
+    customer_first_name: str,
+) -> None:
+    """Tell the customer and the technician about a confirmed visit."""
+    common = dict(
+        template_name="appointment_confirmed.html",
+        heading="Technician visit confirmed",
+        claim_id=str(claim_id),
+        visit_time=visit_time,
+        technician_name=technician_name,
+        address=address,
+        equipment=equipment,
+    )
+    send_template_email(
+        to_email=customer_email,
+        subject=f"Your technician visit is confirmed (claim #{claim_id})",
+        first_name=customer_first_name,
+        closing_note="Please make sure someone over 18 can give the technician access to the equipment.",
+        link_url=f"{settings.customer_app_url}/dashboard/service-requests/{claim_id}",
+        link_label="View my claim",
+        **common,
+    )
+    send_template_email(
+        to_email=technician_email,
+        subject=f"New confirmed visit: claim #{claim_id}",
+        first_name=technician_first_name,
+        closing_note="The job details and the customer's photos are in your technician dashboard.",
+        link_url=f"{settings.admin_app_url}/technician/jobs/{claim_id}",
+        link_label="Open the job",
+        **common,
+    )

@@ -4,6 +4,7 @@ import type {
   PhotoCategory,
   PhotoContentType,
   PhotoUploadResponse,
+  PreferredWindow,
   ServiceRequestDetail,
   ServiceRequestListItem,
   ServiceType,
@@ -25,6 +26,7 @@ export function createServiceRequest(payload: {
   ac_unit_id: number;
   service_type: ServiceType;
   description: string;
+  preferred_windows: PreferredWindow[];
 }): Promise<ServiceRequestDetail> {
   return api.post<ServiceRequestDetail>("/api/service-requests", payload);
 }
@@ -56,4 +58,9 @@ export function requestServiceRequestPhotoUpload(
     ...file,
     category,
   });
+}
+
+/** Answer the service team's request for more information (NEEDS_INFO). */
+export function provideClaimInfo(requestId: number, note: string): Promise<ServiceRequestDetail> {
+  return api.post<ServiceRequestDetail>(`/api/service-requests/${requestId}/provide-info`, { note });
 }

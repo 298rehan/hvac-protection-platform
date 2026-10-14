@@ -8,7 +8,7 @@ import { RequestStatusBadge } from "@/components/service-status";
 import { Alert, ButtonLink, Card, EmptyState, PageHeader, PageLoader } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { SERVICE_TYPE_LABELS } from "@/lib/service-labels";
+import { SERVICE_TYPE_LABELS, formatVisit } from "@/lib/service-labels";
 import { fetchMyServiceRequests } from "@/services/serviceRequestService";
 import type { ServiceRequestListItem } from "@/types";
 
@@ -23,22 +23,22 @@ export default function ServiceRequestsPage() {
   }, []);
 
   if (error) return <Alert>{error}</Alert>;
-  if (!requests) return <PageLoader label="Loading your service requests" />;
+  if (!requests) return <PageLoader label="Loading your claims" />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Service Requests"
-        description="Repairs and maintenance visits for your registered AC units."
-        actions={<ButtonLink href="/dashboard/service-requests/new">New request</ButtonLink>}
+        title="Claims"
+        description="Repair and maintenance claims for the HVAC equipment covered by your plan."
+        actions={<ButtonLink href="/dashboard/service-requests/new">File a claim</ButtonLink>}
       />
 
       {requests.length === 0 ? (
         <EmptyState
           icon={<ClipboardIcon />}
-          title="No service requests yet"
-          description="If something is wrong with a registered AC unit, submit a request and our team will review it."
-          action={<ButtonLink href="/dashboard/service-requests/new">New request</ButtonLink>}
+          title="No claims yet"
+          description="If something is wrong with covered equipment, file a claim and our team will review it."
+          action={<ButtonLink href="/dashboard/service-requests/new">File a claim</ButtonLink>}
         />
       ) : (
         <Card className="overflow-hidden">
@@ -51,7 +51,7 @@ export default function ServiceRequestsPage() {
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Request #{request.id} &middot; {formatDate(request.created_at)}
+                      Claim #{request.id} &middot; {formatDate(request.created_at)}
                     </p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">
                       {SERVICE_TYPE_LABELS[request.service_type]}
@@ -62,6 +62,12 @@ export default function ServiceRequestsPage() {
                         ? ` · Technician: ${request.technician.first_name} ${request.technician.last_name}`
                         : ""}
                     </p>
+                    {request.appointment ? (
+                      <p className="mt-1 text-sm font-medium text-sky-700">
+                        Visit:{" "}
+                        {formatVisit(request.appointment.start_at, request.appointment.end_at, request.appointment.timezone)}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-3">
                     <RequestStatusBadge status={request.status} />

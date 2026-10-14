@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
+import { AppointmentPanel } from "@/components/appointment-panel";
 import { Field, Select, Textarea } from "@/components/form";
 import { ArrowRightIcon, MailIcon, MapPinIcon, PhoneIcon } from "@/components/icons";
 import {
@@ -30,8 +31,15 @@ import {
   PageLoader,
 } from "@/components/ui";
 import { ApiError, errorMessage } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
-import { isTerminal, SERVICE_TYPE_LABELS } from "@/lib/service-format";
+import { formatDate, formatDateTime } from "@/lib/format";
+import {
+  AC_TYPE_LABELS,
+  formatPreferredWindow,
+  formatVisit,
+  isTerminal,
+  SERVICE_TYPE_LABELS,
+} from "@/lib/service-format";
+import { fetchPurchase } from "@/services/adminService";
 import {
   approveRequest,
   assignTechnician,
@@ -40,11 +48,14 @@ import {
   fetchServiceRequest,
   fetchTechnicians,
   rejectRequest,
+  requestMoreInfo,
   startReview,
 } from "@/services/serviceRequestService";
-import type { ActivityEvent, ServiceRequestDetail, Technician } from "@/types";
+import type { ActivityEvent, PurchaseDetail, ServiceRequestDetail, Technician } from "@/types";
 
-type Dialog = "approve" | "reject" | "assign" | "cancel" | null;
+type Dialog = "approve" | "reject" | "info" | "assign" | "cancel" | null;
+
+const SCHEDULING_STATUSES = ["APPROVED", "ASSIGNED", "SCHEDULED"];
 
 export default function ServiceRequestDetailPage() {
   return (
@@ -63,6 +74,7 @@ function ServiceRequestDetailView() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [purchase, setPurchase] = useState<PurchaseDetail | null>(null);
   const [loading, setLoading] = useState(validId);
   const [error, setError] = useState<string | null>(validId ? null : "Invalid request id.");
   const [notice, setNotice] = useState<string | null>(null);
@@ -100,7 +112,15 @@ function ServiceRequestDetailView() {
       .finally(() => setLoading(false));
   }, [validId, load]);
 
-  const needsTechnicians = request?.status === "APPROVED" || request?.status === "ASSIGNED";
+  const purchaseId = request?.plan.purchase_id;
+  useEffect(() => {
+    if (!purchaseId) return;
+    fetchPurchase(purchaseId)
+      .then(setPurchase)
+      .catch(() => setPurchase(null));
+  }, [purchaseId]);
+
+  const needsTechnicians = Boolean(request && SCHEDULING_STATUSES.includes(request.status));
   useEffect(() => {
     if (!needsTechnicians) return;
     fetchTechnicians(true)
@@ -139,8 +159,8 @@ function ServiceRequestDetailView() {
     }
   }
 
-  if (loading) return <PageLoader label="Loading service request" />;
-  if (!request) return <Alert>{error ?? "Service request not found."}</Alert>;
+  if (loading) return <PageLoader label="Loading claim" />;
+  if (!request) return <Alert>{error ?? "Claim not found."}</Alert>;
 
   const status = request.status;
   const terminal = isTerminal(status);
@@ -151,12 +171,12 @@ function ServiceRequestDetailView() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/service-requests">Back to service requests</BackLink>
+      <BackLink href="/service-requests">Back to claims</BackLink>
 
       <PageHeader
         title={
           <span className="flex flex-wrap items-center gap-3">
-            Service request #{request.id}
+            Claim #{request.id}
             <ServiceStatusBadge status={status} />
           </span>
         }
@@ -176,7 +196,63 @@ function ServiceRequestDetailView() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
+          {SCHEDULING_STATUSES.includes(status) ? (
+            <AppointmentPanel
+              request={request}
+              onScheduled={(updated, message) => {
+                setRequest(updated);
+                setError(null);
+                setNotice(message);
+                void loadHistory();
+              }}
+              onStale={() => void load().catch(() => undefined)}
+            />
+          ) : null}
+
+          {request.info_request_note ? (
+            <Card className={status === "NEEDS_INFO" ? "ring-1 ring-yellow-200" : undefined}>
+              <CardHeader
+                title="More information"
+                description={
+                  status === "NEEDS_INFO"
+                    ? "Waiting for the customer to reply."
+                    : "Latest request and the customer's answer."
+                }
+              />
+              <div className="space-y-4 px-5 py-5">
+                <TextBlockLike label="Requested from the customer" value={request.info_request_note} />
+                <TextBlockLike
+                  label="Customer's answer"
+                  value={request.info_response_note ?? "No answer yet."}
+                />
+              </div>
+            </Card>
+          ) : null}
+
           <RequestIssue request={request} />
+
+          <Card>
+            <CardHeader
+              title="Preferred visit times"
+              description={`Customer preferences in the property's time zone (${request.timezone}). These are not confirmed appointments.`}
+            />
+            <div className="px-5 py-4 text-sm text-slate-700">
+              {request.preferred_windows.length ? (
+                <ul className="flex flex-wrap gap-2">
+                  {request.preferred_windows.map((w) => (
+                    <li
+                      key={`${w.date}-${w.window}`}
+                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200"
+                    >
+                      {formatPreferredWindow(w)}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-slate-500">The customer did not choose preferred times.</p>
+              )}
+            </div>
+          </Card>
 
           <Card>
             <CardHeader title="AC unit" description="As registered by the customer." />
@@ -224,23 +300,26 @@ function ServiceRequestDetailView() {
                     <CheckIcon className="h-4 w-4" />
                     Approve
                   </Button>
+                  <Button variant="secondary" disabled={busy} onClick={() => open("info")}>
+                    Request more information
+                  </Button>
                   <Button variant="danger-outline" disabled={busy} onClick={() => open("reject")}>
                     Reject
                   </Button>
                 </>
               ) : null}
-              {status === "APPROVED" || status === "ASSIGNED" ? (
-                <Button disabled={busy} onClick={() => open("assign")}>
-                  {status === "ASSIGNED" ? "Reassign technician" : "Assign technician"}
+              {SCHEDULING_STATUSES.includes(status) ? (
+                <Button variant="secondary" disabled={busy} onClick={() => open("assign")}>
+                  {status === "APPROVED" ? "Assign without a visit time" : "Reassign technician"}
                 </Button>
               ) : null}
               {!terminal ? (
                 <Button variant="subtle" disabled={busy} onClick={() => open("cancel")}>
-                  Cancel request
+                  Cancel claim
                 </Button>
               ) : (
                 <p className="rounded-lg bg-slate-100 px-3 py-2.5 text-sm text-slate-600">
-                  This request is closed and cannot be changed further.
+                  This claim is closed and cannot be changed further.
                 </p>
               )}
             </div>
@@ -295,13 +374,6 @@ function ServiceRequestDetailView() {
                       {request.customer_address ?? "—"}
                     </li>
                   </ul>
-                  <dl className="mt-4 border-t border-slate-100 pt-2">
-                    <DetailRow label="Plan">
-                      <Link href={`/purchases/${request.plan.purchase_id}`} className="text-brand-600 hover:text-brand-700">
-                        {request.plan.plan_name}
-                      </Link>
-                    </DetailRow>
-                  </dl>
                   <Link
                     href={`/customers/${request.customer.id}`}
                     className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
@@ -314,6 +386,25 @@ function ServiceRequestDetailView() {
                 <p className="text-sm text-slate-500">Customer record unavailable.</p>
               )}
             </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Plan & eligibility" description="Checked by the backend when the claim was submitted." />
+            <dl className="px-5 py-2">
+              <DetailRow label="Plan">
+                <Link href={`/purchases/${request.plan.purchase_id}`} className="text-brand-600 hover:text-brand-700">
+                  {request.plan.plan_name}
+                </Link>
+              </DetailRow>
+              <DetailRow label="Plan status">{purchase ? purchase.status : "—"}</DetailRow>
+              <DetailRow label="Coverage ends">{purchase ? formatDate(purchase.expires_at) : "—"}</DetailRow>
+              <DetailRow label="Covered equipment">
+                {coverageText(purchase?.plan.covered_ac_types, (v) => AC_TYPE_LABELS[v])}
+              </DetailRow>
+              <DetailRow label="Covered issues">
+                {coverageText(purchase?.plan.covered_service_types, (v) => SERVICE_TYPE_LABELS[v])}
+              </DetailRow>
+            </dl>
           </Card>
 
           <Card>
@@ -332,6 +423,14 @@ function ServiceRequestDetailView() {
               ) : (
                 <p className="text-slate-500">Not assigned yet.</p>
               )}
+              {request.appointment ? (
+                <p className="mt-4 rounded-lg bg-teal-50 px-3 py-2.5 text-teal-900 ring-1 ring-teal-200">
+                  Visit:{" "}
+                  <span className="font-semibold">
+                    {formatVisit(request.appointment.start_at, request.appointment.end_at, request.timezone)}
+                  </span>
+                </p>
+              ) : null}
             </div>
           </Card>
         </div>
@@ -339,8 +438,8 @@ function ServiceRequestDetailView() {
 
       {dialog === "approve" ? (
         <Modal
-          title={`Approve request #${request.id}?`}
-          description="The request moves to Approved. Assign a technician next."
+          title={`Approve claim #${request.id}?`}
+          description="The claim moves to Approved. Schedule a technician visit next."
           onClose={closeDialog}
         >
           <Field label="Note (optional)" htmlFor="approve-note" hint="Visible to the customer.">
@@ -349,15 +448,15 @@ function ServiceRequestDetailView() {
           <DialogButtons
             busy={busy}
             onCancel={closeDialog}
-            confirmLabel="Approve request"
-            onConfirm={() => run(() => approveRequest(request.id, note.trim()), "Request approved.")}
+            confirmLabel="Approve claim"
+            onConfirm={() => run(() => approveRequest(request.id, note.trim()), "Claim approved.")}
           />
         </Modal>
       ) : null}
 
       {dialog === "reject" ? (
         <Modal
-          title={`Reject request #${request.id}?`}
+          title={`Reject claim #${request.id}?`}
           description="Rejection is final. The customer will see your reason."
           onClose={closeDialog}
         >
@@ -380,19 +479,53 @@ function ServiceRequestDetailView() {
             danger
             disabled={reason.trim().length < 3}
             onCancel={closeDialog}
-            confirmLabel="Reject request"
-            onConfirm={() => run(() => rejectRequest(request.id, reason.trim()), "Request rejected.")}
+            confirmLabel="Reject claim"
+            onConfirm={() => run(() => rejectRequest(request.id, reason.trim()), "Claim rejected.")}
+          />
+        </Modal>
+      ) : null}
+
+      {dialog === "info" ? (
+        <Modal
+          title={`Request more information for claim #${request.id}?`}
+          description="The claim moves to More info required until the customer replies. They will see your message."
+          onClose={closeDialog}
+        >
+          <Field
+            label="What do you need from the customer?"
+            htmlFor="info-reason"
+            error={reason.length > 0 && reason.trim().length < 3 ? "Please write a message (at least 3 characters)." : undefined}
+          >
+            <Textarea
+              id="info-reason"
+              required
+              value={reason}
+              maxLength={1000}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="For example: please upload a photo of the outdoor unit's label."
+            />
+          </Field>
+          <DialogButtons
+            busy={busy}
+            disabled={reason.trim().length < 3}
+            onCancel={closeDialog}
+            confirmLabel="Send request"
+            onConfirm={() =>
+              run(() => requestMoreInfo(request.id, reason.trim()), "More information requested from the customer.")
+            }
           />
         </Modal>
       ) : null}
 
       {dialog === "assign" ? (
         <Modal
-          title={status === "ASSIGNED" ? "Reassign technician" : "Assign technician"}
+          title={status === "APPROVED" ? "Assign without a visit time" : "Reassign technician"}
           description={
-            status === "ASSIGNED"
-              ? "The current technician loses access to this job. Reassignment is only possible before the inspection starts."
-              : "Only active technicians are listed. Open-job counts help balance the workload."
+            status === "SCHEDULED"
+              ? "The current technician loses access and the confirmed visit is cancelled. Book a new time afterwards."
+              : status === "ASSIGNED"
+                ? "The current technician loses access to this job. Reassignment is only possible before the inspection starts."
+                : "Prefer the Technician & appointment panel, which only lists technicians who serve this location. This list shows all active technicians."
           }
           onClose={closeDialog}
         >
@@ -418,7 +551,7 @@ function ServiceRequestDetailView() {
             busy={busy}
             disabled={!technicianId}
             onCancel={closeDialog}
-            confirmLabel={status === "ASSIGNED" ? "Reassign" : "Assign"}
+            confirmLabel={status === "APPROVED" ? "Assign" : "Reassign"}
             onConfirm={() =>
               run(() => assignTechnician(request.id, Number(technicianId)), "Technician assigned.")
             }
@@ -428,8 +561,8 @@ function ServiceRequestDetailView() {
 
       {dialog === "cancel" ? (
         <Modal
-          title={`Cancel request #${request.id}?`}
-          description="Cancellation is final. The customer will see your note."
+          title={`Cancel claim #${request.id}?`}
+          description="Cancellation is final and cancels any confirmed visit. The customer will see your note."
           onClose={closeDialog}
         >
           <Field label="Note (optional)" htmlFor="cancel-note">
@@ -439,8 +572,8 @@ function ServiceRequestDetailView() {
             busy={busy}
             danger
             onCancel={closeDialog}
-            confirmLabel="Cancel request"
-            onConfirm={() => run(() => cancelRequest(request.id, note.trim()), "Request cancelled.")}
+            confirmLabel="Cancel claim"
+            onConfirm={() => run(() => cancelRequest(request.id, note.trim()), "Claim cancelled.")}
           />
         </Modal>
       ) : null}
@@ -451,13 +584,17 @@ function ServiceRequestDetailView() {
 function actionHint(request: ServiceRequestDetail): string {
   switch (request.status) {
     case "SUBMITTED":
-      return "Start the review to claim this request.";
+      return "Start the review to take ownership of this claim.";
     case "UNDER_REVIEW":
-      return "Approve to schedule a technician, or reject with a reason.";
+      return "Approve, ask the customer for more information, or reject with a reason.";
+    case "NEEDS_INFO":
+      return "Waiting for the customer to provide more information.";
     case "APPROVED":
-      return "Assign an active technician to this job.";
+      return "Pick a technician and confirm a visit in the panel on the left.";
     case "ASSIGNED":
-      return "Waiting for the technician to start the inspection.";
+      return "A technician is assigned. Book a visit time in the panel on the left.";
+    case "SCHEDULED":
+      return "Visit confirmed. Waiting for the technician to start the inspection.";
     case "INSPECTION_IN_PROGRESS":
       return "The technician is inspecting the unit.";
     case "AWAITING_CUSTOMER_APPROVAL":
@@ -492,6 +629,22 @@ function DialogButtons({
       <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} disabled={busy || disabled}>
         {busy ? "Saving…" : confirmLabel}
       </Button>
+    </div>
+  );
+}
+
+function coverageText<T extends string>(values: T[] | null | undefined, label: (v: T) => string): string {
+  if (values === undefined) return "—";
+  if (values === null) return "Not restricted (no coverage rule defined)";
+  if (values.length === 0) return "None";
+  return values.map(label).join(", ");
+}
+
+function TextBlockLike({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-slate-700">{value}</p>
     </div>
   );
 }

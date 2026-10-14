@@ -9,8 +9,19 @@ from sqlalchemy import func, select
 
 from app.core.deps import AdminUser, DbSession
 from app.core.security import hash_password
-from app.models import TERMINAL_SERVICE_REQUEST_STATUSES, ServiceRequest, User, UserRole
-from app.schemas.service_request import TechnicianCreate, TechnicianOut, TechnicianUpdate
+from app.models import (
+    TERMINAL_SERVICE_REQUEST_STATUSES,
+    ServiceRequest,
+    TechnicianProfile,
+    User,
+    UserRole,
+)
+from app.schemas.service_request import (
+    TechnicianCreate,
+    TechnicianOut,
+    TechnicianProfileIn,
+    TechnicianUpdate,
+)
 
 router = APIRouter(prefix="/api/technicians", tags=["Technicians"])
 
@@ -29,6 +40,11 @@ def _open_jobs(db, technician_id: int) -> int:
 def _out(db, tech: User) -> TechnicianOut:
     out = TechnicianOut.model_validate(tech)
     out.open_jobs = _open_jobs(db, tech.id)
+    profile = db.get(TechnicianProfile, tech.id)
+    if profile is not None:
+        out.service_states = profile.service_states or []
+        out.service_zip_prefixes = profile.service_zip_prefixes or []
+        out.specialties = profile.specialties or []
     return out
 
 
@@ -93,4 +109,22 @@ def update_technician(technician_id: int, payload: TechnicianUpdate, db: DbSessi
         setattr(tech, field, value)
     db.commit()
     db.refresh(tech)
+    return _out(db, tech)
+
+
+@router.put(
+    "/{technician_id}/profile",
+    response_model=TechnicianOut,
+    summary="Set a technician's service area and specialties (admin)",
+)
+def update_technician_profile(
+    technician_id: int, payload: TechnicianProfileIn, db: DbSession, _: AdminUser
+):
+    tech = _get_or_404(db, technician_id)
+    profile = db.get(TechnicianProfile, tech.id) or TechnicianProfile(user_id=tech.id)
+    profile.service_states = payload.service_states
+    profile.service_zip_prefixes = payload.service_zip_prefixes
+    profile.specialties = [s.value for s in payload.specialties]
+    db.add(profile)
+    db.commit()
     return _out(db, tech)

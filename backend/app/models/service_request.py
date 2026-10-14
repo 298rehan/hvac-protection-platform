@@ -7,7 +7,7 @@ activity trail (who did what, when) is written to DynamoDB through the
 
 from datetime import datetime
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, Text
+from sqlalchemy import JSON, Enum as SAEnum, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.session import Base
@@ -66,6 +66,13 @@ class ServiceRequest(Base):
     technician_notes: Mapped[str | None] = mapped_column(Text)
     customer_decision_note: Mapped[str | None] = mapped_column(Text)
 
+    # Customer's preferred visit windows: [{"date": "2026-10-20", "window": "MORNING"}].
+    # Preferences only - a confirmed visit is an Appointment row.
+    preferred_windows: Mapped[list[dict] | None] = mapped_column(JSON)
+    # "More information required" exchange (latest round; full trail in the activity log).
+    info_request_note: Mapped[str | None] = mapped_column(Text)
+    info_response_note: Mapped[str | None] = mapped_column(Text)
+
     # --- Lifecycle timestamps ----------------------------------------------
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
@@ -93,6 +100,15 @@ class ServiceRequest(Base):
     assigned_technician: Mapped[User | None] = relationship(foreign_keys=[assigned_technician_id])
     ac_unit: Mapped[AcUnit] = relationship(foreign_keys=[ac_unit_id], lazy="joined")
     purchase: Mapped[Purchase] = relationship(foreign_keys=[purchase_id])
+    appointments: Mapped[list["Appointment"]] = relationship(  # noqa: F821
+        lazy="selectin", order_by="Appointment.start_at"
+    )
+
+    @property
+    def active_appointment(self) -> "Appointment | None":  # noqa: F821
+        from app.models.enums import AppointmentStatus
+
+        return next((a for a in self.appointments if a.status is AppointmentStatus.CONFIRMED), None)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging helper
         return f"<ServiceRequest {self.id} {self.status.value}>"
