@@ -56,14 +56,30 @@ jobs:
           mysql -h 127.0.0.1 -uroot -pci-root-password -e \
             "CREATE DATABASE hvac_migrations CHARACTER SET utf8mb4; CREATE DATABASE hvac_tests CHARACTER SET utf8mb4;"
 
-      - name: Migrations - upgrade, model check, downgrade, re-upgrade
+      - name: Migrations - single head, upgrade, model check, downgrade, re-upgrade
         env:
           DATABASE_URL: ${{ env.MYSQL_URL_BASE }}/hvac_migrations?charset=utf8mb4
         run: |
+          test "$(alembic heads | grep -c .)" -eq 1 || { echo "Expected exactly one migration head"; alembic heads; exit 1; }
+          python migration_status.py | tee /tmp/status.txt
+          grep -q '^STATUS=pending$' /tmp/status.txt
           alembic upgrade head
+          python migration_status.py | tee /tmp/status.txt
+          grep -q '^STATUS=up_to_date$' /tmp/status.txt
           alembic check
           alembic downgrade base
           alembic upgrade head
+
+      - name: Deploy scripts - shellcheck and a real backup against MySQL
+        working-directory: .
+        run: |
+          shellcheck deploy/*.sh
+          python3 -m py_compile deploy/backup-db.py
+          fake="$RUNNER_TEMP/fakerepo"; mkdir -p "$fake/deploy"
+          cp deploy/backup-db.py "$fake/deploy/"
+          echo "DATABASE_URL=${MYSQL_URL_BASE}/hvac_migrations?charset=utf8mb4" > "$fake/.env"
+          BACKUP_DIR="$RUNNER_TEMP/backups" python3 "$fake/deploy/backup-db.py" ci | tee /tmp/backup.txt
+          grep -q '^BACKUP_FILE=' /tmp/backup.txt
 
       - name: Test suite (SQLite)
         run: pytest
@@ -206,7 +222,10 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: IMAGE_TAG,GHCR_USER,GHCR_TOKEN
           script_stop: true
+          # Backup + migration + image pulls can take a while on a t3.micro.
+          command_timeout: 30m
           script: |
+            set -euo pipefail
             cd /home/ubuntu/hvac-project/hvac-protection-platform
             git pull --ff-only origin main
             bash deploy/deploy.sh "$IMAGE_TAG"

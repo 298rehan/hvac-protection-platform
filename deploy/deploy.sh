@@ -5,9 +5,10 @@
 #   cd /home/ubuntu/hvac-project/hvac-protection-platform
 #   GHCR_USER=<github-user> GHCR_TOKEN=<token with read:packages> bash deploy/deploy.sh <image-tag>
 #
-# Every check runs BEFORE anything changes, so a failed check leaves the running
-# containers untouched. The script never migrates the database, never removes
-# volumes and never runs `docker compose down`.
+# Order: lock -> pre-flight -> pull -> backup + migrate + verify (deploy/db-migrate.sh)
+# -> start containers -> health checks. Any failure before "Starting containers"
+# leaves the running containers untouched. The script never downgrades or
+# resets the database, never removes volumes and never runs `docker compose down`.
 set -euo pipefail
 
 IMAGE_TAG="${1:-latest}"
@@ -17,7 +18,15 @@ cd "$(dirname "$0")/.."
 step() { printf '\n==> %s\n' "$*"; }
 fail() { printf '\nDEPLOY ABORTED: %s\n' "$*" >&2; exit 1; }
 
+# One deploy (and so one migration) at a time on this server, even if two
+# workflow runs or a manual run overlap.
+exec 9>"${DEPLOY_LOCK_FILE:-$HOME/.hvac-deploy.lock}"
+flock -n 9 || fail "another deploy is already running on this server."
+export DEPLOY_LOCK_HELD=1
+
 step "Pre-flight checks (image tag: ${IMAGE_TAG})"
+command -v mysqldump >/dev/null || fail "mysqldump is not installed on this host (sudo apt-get install -y mysql-client). Nothing was changed."
+command -v python3 >/dev/null || fail "python3 is required on this host for database backups. Nothing was changed."
 
 # `env_file` with `required: false` needs Docker Compose 2.24 or newer.
 compose_version="$(docker compose version --short 2>/dev/null || true)"
@@ -54,20 +63,11 @@ fi
 step "Pulling images"
 docker compose pull
 
-step "Checking database migrations (read-only)"
-# Runs the NEW backend image once, without starting the service, to compare the
-# database's Alembic revision with the code's head. It only reads the
-# alembic_version table.
-alembic() { docker compose run --rm --no-deps -T backend alembic "$@" 2>/dev/null; }
-current="$(alembic current | awk 'NF {rev=$1} END {print rev}')"
-head="$(alembic heads | awk 'NF {rev=$1} END {print rev}')"
-echo "database revision: ${current:-<none>}   code head: ${head:-<unknown>}"
-[ -n "$head" ] || fail "Could not read the Alembic head from the new image."
-if [ "$current" != "$head" ]; then
-  fail "The database is at '${current:-<none>}' but this release needs '${head}'.
-Back up and migrate first (docs/DEPLOYMENT.md, 'Database migration'), then re-run the deploy.
-The currently running containers have NOT been changed."
-fi
+step "Database migrations"
+# Uses the NEW backend image: reads its migration head, backs up (only when
+# something is pending), upgrades and verifies. Fails before any container
+# is replaced.
+bash deploy/db-migrate.sh || fail "database step failed (see above). The running containers have NOT been changed."
 
 step "Starting containers"
 docker compose up -d
@@ -102,4 +102,10 @@ step "Cleaning up dangling images"
 docker image prune -f >/dev/null
 
 docker compose ps
+
+step "Deploy summary"
+echo "    image tag:            ${IMAGE_TAG}"
+echo "    database:             migrated/verified (see 'Database migrations' above)"
+echo "    containers deployed:  yes"
+echo "    backend health:       passed"
 echo "Deployed ${IMAGE_TAG}"

@@ -4,8 +4,8 @@ Production: EC2 `i-0fbca37ce8619e143` (ap-southeast-2, t3.micro), app directory
 `/home/ubuntu/hvac-project/hvac-protection-platform`, MySQL on the host, Nginx
 in front, images on GHCR, deploys by GitHub Actions (`.github/workflows/ci.yml`).
 
-**Order matters:** server prep → (optional) Terraform → database backup →
-migration → push / deploy → AWS wiring → verification. Every step below is
+**Order:** server prep (once) → push. Each deploy backs up, migrates and
+verifies the database automatically before switching containers (section 3). Every step below is
 safe to repeat.
 
 ---
@@ -81,98 +81,165 @@ MySQL, so it can happen before or after the code deploy.
 
 ---
 
-## 3. Back up the production database
+## 3. How every deploy handles the database (automatic)
 
-```bash
-# Read the database name/user from DATABASE_URL in .env (do not paste the URL anywhere).
-mkdir -p ~/backups && chmod 700 ~/backups
-STAMP=$(date +%F-%H%M)
-mysqldump --single-transaction --routines --triggers --set-gtid-purged=OFF \
-  -u <db_user> -p <db_name> | gzip > ~/backups/<db_name>-$STAMP.sql.gz
+Each push to `main` runs CI (tests on SQLite and MySQL 8.0, a migration
+upgrade/downgrade cycle, a single-head check, shellcheck, a real `mysqldump`
+backup test, frontend builds, Terraform checks), pushes images tagged `<sha>`
+and `latest`, then runs `deploy/deploy.sh <sha>` on the server:
 
-# Verify the backup exists, is complete and readable:
-ls -lh ~/backups/<db_name>-$STAMP.sql.gz
-gunzip -t ~/backups/<db_name>-$STAMP.sql.gz && echo "archive OK"
-zcat ~/backups/<db_name>-$STAMP.sql.gz | grep -c "CREATE TABLE"     # expect 6 (5 tables + alembic_version)
-zcat ~/backups/<db_name>-$STAMP.sql.gz | tail -1                    # "-- Dump completed on ..."
+1. **Lock:** `flock ~/.hvac-deploy.lock`. A second deploy or migration on the
+   server is refused, on top of the GitHub `concurrency` group.
+2. **Pre-flight:** compose version, `mysqldump` and `python3` present,
+   `.env` secrets present (checked by name only).
+3. **Pull** the images for `<sha>`.
+4. **`deploy/db-migrate.sh`**, using the backend image for `<sha>`:
+   * `python migration_status.py` connects to the database and compares its
+     revision with **this release's own migration head**. Nothing is
+     hard-coded; several pending migrations are listed oldest first.
+   * Stops (nothing changed) if the database can't be reached, if the
+     release has more than one head, or if the database is at a revision this
+     release doesn't know (e.g. migrated by a newer release). **It never
+     downgrades and never uses `alembic stamp`.**
+   * If migrations are pending, **creates and verifies a backup**
+     (`deploy/backup-db.py`, see below), then runs `alembic upgrade head`.
+     Alembic applies only the missing revisions, in order.
+   * Re-reads the revision and **verifies it equals the head**.
+   * If nothing is pending, it does nothing (no backup).
+5. **Start containers** for `<sha>`, wait for `/api/health`, check both
+   frontends, seed any missing catalog services, print `docker compose ps`.
 
-# Keep a copy off the instance as well, e.g.:
-# scp ubuntu@<EC2_HOST>:~/backups/<db_name>-$STAMP.sql.gz .
+Any failure in steps 1–4 aborts **before** containers are replaced. The old
+release keeps running and the GitHub job fails with the reason. Example log:
+
+```
+==> Database migrations
+    database connection: ok
+    current revision:    0003_claims_scheduling
+    expected head:       0004_service_marketplace   (from image 3f2c9e1...)
+    pending migrations:  0004_service_marketplace
+    creating backup before migrating...
+    backup verified:     /home/ubuntu/hvac-backups/hvac_db-20261015-134909-before-0004_service_marketplace.sql.gz (48213 bytes, 12 tables)
+    applying: 0004_service_marketplace
+    applied: 0003_claims_scheduling -> 0004_service_marketplace, ...
+    migration verified:  database is at 0004_service_marketplace (= expected head)
+==> Starting containers
+==> Waiting for backend health
+backend healthy
 ```
 
----
+### One-time setup on the server
 
-## 4. Push the code: the first deploy stops at the migration gate (expected)
+```bash
+command -v mysqldump || sudo apt-get install -y mysql-client   # usually already there with mysql-server
+command -v flock python3                                       # both ship with Ubuntu
+```
 
-Push to `main`. CI runs backend tests on SQLite and MySQL 8.0 (including
-migration upgrade/check/downgrade/re-upgrade), frontend lint, type-check and
-build, and Terraform fmt/validate. It then pushes images tagged `<sha>` and
-`latest`. The deploy job logs in to GHCR with a job-scoped token, pulls the
-images, and runs `alembic current` with the new image. The database is still
-at `0001_initial`, so it stops with **"Back up and migrate first"**. Nothing
-running is changed.
-
-## 5. Migrate (after step 3), using the new image
+The backup connects with the credentials in the root `.env` `DATABASE_URL`
+(`host.docker.internal` is mapped to `127.0.0.1`). If that MySQL user may only
+log in from the Docker network, add `BACKUP_DB_HOST=<address>` to `.env`.
+Test it once by hand:
 
 ```bash
 cd /home/ubuntu/hvac-project/hvac-protection-platform
-export IMAGE_TAG=<commit sha from the GitHub Actions run>
-
-docker compose run --rm --no-deps backend alembic current     # where the server is now
-docker compose run --rm --no-deps backend alembic upgrade head # applies every pending migration (0002-0004)
-docker compose run --rm --no-deps backend alembic current     # expect 0004_service_marketplace (head)
+python3 deploy/backup-db.py manual-test     # prints BACKUP_FILE=..., BACKUP_SIZE=..., BACKUP_TABLES=...
 ```
 
-What `0002_maintenance_workflow` does (additive only):
-* `users.role` gains `TECHNICIAN` (appended to the ENUM, in-place, metadata-only).
-* `plans.max_ac_units INT NOT NULL DEFAULT 1` (existing plans get 1).
-* Creates `ac_units`, `service_requests`, `photos`, `activity_outbox`.
+### Rule for future migrations: expand first
 
-What `0003_claims_scheduling` does (additive only):
-* ENUM values appended: `ac_type` FURNACE; `service_type` SYSTEM_NOT_STARTING,
-  THERMOSTAT_ISSUE; `service_requests.status` NEEDS_INFO, SCHEDULED.
-* Nullable columns: `plans.covered_ac_types`, `plans.covered_service_types`
-  (NULL = not restricted), `service_requests.preferred_windows`,
-  `info_request_note`, `info_response_note`.
-* Creates `technician_profiles` (service states, ZIP prefixes, specialties) and
-  `appointments` (UTC start/end, property time zone, CONFIRMED/CANCELLED).
-* Verified on a disposable MySQL 8.0.46: upgrade from 0002 with existing rows,
-  `alembic check`, the downgrade guard, and a downgrade/re-upgrade cycle.
+Migrations run **while the previous release is still serving traffic**, and
+an application rollback does not undo them. So every migration must keep the
+previous release working: add tables/nullable columns/ENUM values at the end;
+never drop or rename in the same release that stops using something. Remove
+old columns in a later release. All migrations so far (0002–0004) follow this.
 
-What `0004_service_marketplace` does (additive only):
-* Creates `service_categories`, `hvac_services`, `service_addons`,
-  `discount_codes`, `custom_plans`, `custom_plan_items`, `service_orders`,
-  `service_order_items` (all money columns `DECIMAL(10,2)`).
-* `appointments.service_request_id` becomes nullable and `appointments` gains
-  `service_order_id` plus a CHECK that exactly one of them is set. Existing
-  appointment rows are unchanged.
-* Verified on a disposable MySQL 8.0.46 with an existing claim appointment:
-  upgrade, `alembic check`, CHECK constraint, downgrade guard (refuses while
-  orders exist), downgrade/re-upgrade.
+## 4. Backups: where, verification, retention, restore
 
-The starter catalog is added by `python seed_catalog.py`, which the deploy
-script runs after every deploy. It is insert-only by slug, so it never
-duplicates services or overwrites admin price changes.
+* **Where:** `~/hvac-backups/<db>-<UTC timestamp>-before-<head>.sql.gz` on the
+  EC2 host, mode 600, directory mode 700.
+* **How:** `mysqldump --single-transaction --routines --triggers
+  --no-tablespaces --set-gtid-purged=OFF`, consistent without locking InnoDB
+  tables. The password goes through a temporary owner-only option file and is
+  never on a command line or in a log.
+* **Verified** before any migration: the file is non-empty, is valid gzip, and
+  ends with mysqldump's `Dump completed` marker. Table count is logged.
+* **Retention:** the newest 10 are kept (`BACKUP_KEEP=<n>` in `.env` to
+  change). Copy important ones off the instance:
+  `scp ubuntu@<EC2_HOST>:~/hvac-backups/<file> .`
 
-The **old application keeps working on the migrated schema**. It doesn't read
-the new column or tables, so migrating before the deploy causes no downtime.
-MySQL DDL is not transactional: if the command fails half-way, stop and restore
-from the step 3 backup rather than retrying blindly.
-
-Verified before release: upgrade from `0001` with existing rows on a disposable
-**MySQL 8.0.46**, `alembic check` (models match the schema), the CHECK
-constraint, the downgrade guard, and a downgrade/re-upgrade cycle.
-
-## 6. Deploy
-
-In GitHub → Actions → the failed run → **Re-run failed jobs** (or push again).
-`deploy/deploy.sh` then runs `docker compose up -d`, waits for
-`/api/health`, checks both frontends respond, and prints `docker compose ps`.
-
-Manual equivalent on the server:
+**Restore (into a NEW database first, never over the live one):**
 
 ```bash
-GHCR_USER=<github-user> GHCR_TOKEN=<PAT with read:packages> bash deploy/deploy.sh <sha>
+cd ~/hvac-backups
+gunzip -t <file>.sql.gz && echo "archive OK"
+mysql -u root -p -e "CREATE DATABASE hvac_restore CHARACTER SET utf8mb4;"
+gunzip -c <file>.sql.gz | mysql -u root -p hvac_restore
+mysql -u root -p hvac_restore -e "SELECT version_num FROM alembic_version; SELECT COUNT(*) FROM users;"
+```
+
+Only after checking the restored copy: stop the backend
+(`docker compose stop backend`), switch `DATABASE_URL` in `.env` to the
+restored database (or rename databases), deploy the image matching that
+database's revision (`IMAGE_TAG=<sha> docker compose up -d`), and verify
+health. Keep the original database until you are sure.
+
+(Verified locally: a backup taken by this script restored into a fresh
+MySQL 8.0.46 database with every row and the original revision.)
+
+## 5. Fixing the current mismatch (production at 0003, code at 0004)
+
+Nothing manual is needed beyond the one-time setup above. Push this change
+(or re-run the failed workflow after pushing it). The deploy backs up,
+applies `0004_service_marketplace`, verifies it and deploys.
+
+To do it by hand instead, migrating without redeploying the frontends:
+
+```bash
+cd /home/ubuntu/hvac-project/hvac-protection-platform
+git pull --ff-only origin main
+export IMAGE_TAG=<sha of the commit you pushed>      # from the GitHub Actions run
+echo "<github token with read:packages>" | docker login ghcr.io -u <github-user> --password-stdin
+docker compose pull backend
+bash deploy/db-migrate.sh        # lock -> status -> verified backup -> upgrade -> verify
+```
+
+What `0004_service_marketplace` does (reviewed: additive, no data removed):
+* Creates eight new empty tables (catalog, plans, cart, orders, order items).
+* `appointments.service_request_id` becomes nullable, and `appointments`
+  gains `service_order_id`, a foreign key and a CHECK constraint. Adding a
+  CHECK makes MySQL copy the `appointments` table, which is small, so the lock
+  lasts well under a second at current sizes. Existing rows keep their values.
+* Verified on a disposable MySQL 8.0.46 that mirrors production (`0003` with
+  claims, an appointment and a password-protected app user), with the real
+  backend image and `docker compose`: backup verified, upgrade applied,
+  revision verified, all rows intact.
+
+What `0002_maintenance_workflow` and `0003_claims_scheduling` do (additive):
+* 0002: `users.role` gains `TECHNICIAN`; `plans.max_ac_units` (default 1);
+  creates `ac_units`, `service_requests`, `photos`, `activity_outbox`.
+* 0003: ENUM values appended; nullable plan coverage and request columns;
+  creates `technician_profiles` and `appointments`.
+
+## 6. If a migration or deploy fails
+
+| What the log says | State | What to do |
+|---|---|---|
+| `another deploy is already running` | Nothing changed | Wait for it, then re-run. |
+| `cannot connect to the database` | Nothing changed | Check MySQL (`sudo systemctl status mysql`) and `DATABASE_URL`; re-run. |
+| `BACKUP FAILED: ...` | Nothing migrated, old containers running | Fix the cause shown (often `mysqldump` missing or the user's allowed host → `BACKUP_DB_HOST`); re-run. |
+| `not part of this release's migration history` | Nothing changed | The database is newer than this code (a rollback to an old commit?). Deploy a release that contains that revision. **Do not stamp or downgrade.** |
+| `more than one migration head` | Nothing changed | Two migrations share a parent: add an Alembic merge revision, push again. |
+| `after upgrading the database is at X, expected Y` | Possibly **partly migrated**; old containers running | MySQL DDL is not transactional. Don't re-run blindly. Read the alembic error printed above it, check `SHOW CREATE TABLE` for the tables involved, fix the migration in a new commit, or restore the logged backup (section 4). |
+| `Backend did not become healthy` | Schema migrated, new containers started | Roll back the **application only**: `IMAGE_TAG=<previous sha> docker compose up -d`. The schema stays (expand-first rule), and nothing is downgraded. |
+
+### Verify revision and health at any time
+
+```bash
+cd /home/ubuntu/hvac-project/hvac-protection-platform
+docker compose run --rm --no-deps -T backend python migration_status.py   # STATUS / CURRENT / HEAD / PENDING
+docker compose ps
+curl -fsS http://127.0.0.1:8000/api/health
+ls -lh ~/hvac-backups | tail -5
 ```
 
 ## 7. Attach the IAM role (once, needs your approval)
@@ -261,12 +328,13 @@ restores the old build-based compose file, `docker images` lists the old
 locally-built images, and `docker compose up -d` brings them back. Then restore
 the file with `git checkout main -- compose.yml`.
 
-**Database:** usually nothing to do. The migration is additive and the old
-code runs on the new schema. A downgrade (`alembic downgrade 0001_initial`)
-**deletes all AC units, service requests, photo metadata and outbox rows**, and
-refuses while technician accounts exist. Prefer leaving the schema in place.
-In a real emergency, restore the step 3 backup into a new database, verify it,
-then point `DATABASE_URL` at it.
+**Database:** deploys never downgrade. Because migrations are additive
+(expand first), the previous application release runs on the new schema, so an
+application rollback needs no database change. A downgrade such as
+`alembic downgrade 0001_initial` **deletes data** (AC units, claims, orders) and
+the migrations refuse while such data exists. Don't use it in production. In a
+real emergency restore a backup into a new database (section 4) and switch to
+it after checking it.
 
 **AWS:** unset `S3_BUCKET_NAME`/`DYNAMODB_ACTIVITY_TABLE` and restart the
 backend to disable the integrations. The bucket and table are
