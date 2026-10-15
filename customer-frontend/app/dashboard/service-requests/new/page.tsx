@@ -1,44 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Field, Input, Select, Textarea } from "@/components/form";
-import { SnowflakeIcon } from "@/components/icons";
+import { ShieldIcon } from "@/components/icons";
 import { postToS3, validate as validatePhoto } from "@/components/photo-uploader";
 import {
   Alert,
   BackLink,
   Button,
   ButtonLink,
+  CheckIcon,
   Card,
-  DetailRow,
   EmptyState,
   PageHeader,
   PageLoader,
 } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { cx } from "@/lib/format";
-import {
-  AC_TYPE_LABELS,
-  MAX_CLAIM_PHOTOS,
-  MAX_PREFERRED_DAYS_AHEAD,
-  MAX_PREFERRED_WINDOWS,
-  PHOTO_RECOMMENDED,
-  PREFERRED_WINDOW_LABELS,
-  SERVICE_TYPE_LABELS,
-  formatWindowDate,
-} from "@/lib/service-labels";
+import { MAX_CLAIM_PHOTOS, PREFERRED_WINDOW_LABELS, REQUEST_STATUS_LABELS } from "@/lib/service-labels";
 import { confirmPhoto, fetchCoverage, fetchMyAcUnits, type Coverage } from "@/services/acUnitService";
+import { fetchAvailability } from "@/services/marketplaceService";
+import { fetchRegions } from "@/services/planService";
 import { createServiceRequest, requestServiceRequestPhotoUpload } from "@/services/serviceRequestService";
-import type { AcUnit, PhotoContentType, PreferredWindow, PreferredWindowName, ServiceType } from "@/types";
+import type { AcUnit, PhotoContentType, PreferredWindowName, Region, ServiceRequestDetail, ServiceType } from "@/types";
 
-const STEPS = ["Plan & property", "HVAC system", "Issue", "Photos", "Visit preferences", "Review"];
-const ALL_SERVICE_TYPES = Object.keys(SERVICE_TYPE_LABELS) as ServiceType[];
+/** The issue choices shown to customers, mapped to the backend's service types. */
+const ISSUES: { value: ServiceType; label: string }[] = [
+  { value: "NOT_COOLING", label: "AC not cooling" },
+  { value: "SYSTEM_NOT_STARTING", label: "AC not turning on" },
+  { value: "NOT_HEATING", label: "Heating problem" },
+  { value: "WATER_LEAK", label: "Water leakage" },
+  { value: "STRANGE_NOISE", label: "Unusual noise" },
+  { value: "ROUTINE_MAINTENANCE", label: "Maintenance / cleaning" },
+  { value: "OTHER", label: "Other issue" },
+];
 const WINDOWS = Object.keys(PREFERRED_WINDOW_LABELS) as PreferredWindowName[];
-const DESCRIPTION_MIN = 10;
 const DESCRIPTION_MAX = 2000;
+const OTHER_MIN = 10;
+const NEW_ADDRESS = "new";
 
 interface SelectedPhoto {
   key: string;
@@ -48,9 +50,22 @@ interface SelectedPhoto {
   status: "ready" | "uploading" | "done" | "error";
 }
 
+interface Address {
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+}
+
 function isoDate(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function tomorrow(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return isoDate(d);
 }
 
 export default function NewClaimPage() {
@@ -62,144 +77,114 @@ export default function NewClaimPage() {
 }
 
 function NewClaim() {
-  const router = useRouter();
-  const preselected = useSearchParams().get("ac");
+  const { user } = useAuth();
 
   const [units, setUnits] = useState<AcUnit[] | null>(null);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [step, setStep] = useState(0);
-  const [unitId, setUnitId] = useState(preselected ?? "");
+  const [locationId, setLocationId] = useState<string>("");
+  const [newAddress, setNewAddress] = useState<Address>({ address: "", city: "", state: "", zip_code: "" });
   const [serviceType, setServiceType] = useState<ServiceType | "">("");
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [photoErrors, setPhotoErrors] = useState<string[]>([]);
-  const [windows, setWindows] = useState<PreferredWindow[]>([]);
-  const [windowDate, setWindowDate] = useState("");
-  const [windowName, setWindowName] = useState<PreferredWindowName>("MORNING");
-  const [stepError, setStepError] = useState<string | null>(null);
+  const [visitDate, setVisitDate] = useState("");
+  const [visitWindow, setVisitWindow] = useState<PreferredWindowName | "">("");
+  const [availability, setAvailability] = useState<Record<string, boolean>>({});
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
-
-  // Revoke preview URLs when the page unmounts.
+  const [created, setCreated] = useState<ServiceRequestDetail | null>(null);
+  const [failedUploads, setFailedUploads] = useState(0);
+  const inFlight = useRef(false);
   const photosRef = useRef<SelectedPhoto[]>([]);
+
+  useEffect(() => {
+    Promise.all([fetchMyAcUnits(), fetchCoverage(), fetchRegions()])
+      .then(([unitList, cov, regionList]) => {
+        setUnits(unitList);
+        setCoverage(cov);
+        setRegions(regionList);
+        const purchaseId = cov.purchase?.id;
+        const covered = unitList.filter((u) => u.purchase_id === purchaseId && !u.has_open_request);
+        setLocationId(covered.length ? String(covered[0].id) : NEW_ADDRESS);
+      })
+      .catch((err) => setLoadError(errorMessage(err)));
+  }, []);
+
+  // Prefill the "different address" fields from the profile once it's known.
+  const profileAddress = useMemo<Address>(
+    () => ({
+      address: user?.address ?? "",
+      city: user?.city ?? "",
+      state: user?.state ?? "",
+      zip_code: user?.zip_code ?? "",
+    }),
+    [user],
+  );
+  const [prefilled, setPrefilled] = useState(false);
+  if (!prefilled && user) {
+    setPrefilled(true);
+    setNewAddress(profileAddress);
+  }
+
+  // Revoke preview URLs when leaving the page.
   useEffect(() => {
     photosRef.current = photos;
   }, [photos]);
   useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.preview)), []);
 
-  useEffect(() => {
-    Promise.all([fetchMyAcUnits(), fetchCoverage()])
-      .then(([list, cov]) => {
-        setUnits(list);
-        setCoverage(cov);
-      })
-      .catch((err) => setLoadError(errorMessage(err)));
-  }, []);
-
-  if (loadError) return <Alert>{loadError}</Alert>;
-  if (!units || !coverage) return <PageLoader label="Loading your plan and AC units" />;
-
-  const purchase = coverage.purchase;
-  const plan = purchase?.plan;
-  const active = purchase?.status === "ACTIVE";
-  const eligible = units.filter((u) => active && u.purchase_id === purchase?.id && !u.has_open_request);
-  const selected = eligible.find((u) => String(u.id) === unitId) ?? eligible[0];
-  const equipmentCovered =
-    !plan?.covered_ac_types || (selected ? plan.covered_ac_types.includes(selected.ac_type) : false);
-  const issueOptions = plan?.covered_service_types
-    ? ALL_SERVICE_TYPES.filter((t) => plan.covered_service_types?.includes(t))
-    : ALL_SERVICE_TYPES;
-  const today = new Date();
-  const minDate = isoDate(today);
-  const maxDate = isoDate(new Date(today.getTime() + MAX_PREFERRED_DAYS_AHEAD * 86_400_000));
-
-  const header = (
-    <>
-      <BackLink href="/dashboard/service-requests">Claims</BackLink>
-      <PageHeader
-        title="File a claim"
-        description="Tell us about the problem. Our team reviews every claim before a technician visit is booked."
-      />
-    </>
+  const purchase = coverage?.purchase ?? null;
+  const savedLocations = (units ?? []).filter((u) => u.purchase_id === purchase?.id);
+  const selectedUnit = savedLocations.find((u) => String(u.id) === locationId) ?? null;
+  const location: Address | null = selectedUnit
+    ? { address: selectedUnit.address, city: selectedUnit.city, state: selectedUnit.state, zip_code: selectedUnit.zip_code }
+    : locationId === NEW_ADDRESS
+      ? newAddress
+      : null;
+  const locationComplete = Boolean(
+    location && location.address.trim() && location.city.trim() && location.state && location.zip_code.trim(),
   );
 
-  if (!purchase || !active) {
-    return (
-      <div className="space-y-6">
-        {header}
-        <Alert tone="info">
-          Claims can only be filed against an <strong>active</strong> protection plan.{" "}
-          {purchase ? (
-            <>
-              Your plan is still awaiting approval - <Link href="/dashboard/my-plan" className="font-semibold underline">view my plan</Link>.
-            </>
-          ) : (
-            <Link href="/plans" className="font-semibold underline">Browse plans</Link>
-          )}
-        </Alert>
-      </div>
-    );
-  }
-
-  if (eligible.length === 0) {
-    return (
-      <div className="space-y-6">
-        {header}
-        <EmptyState
-          icon={<SnowflakeIcon />}
-          title="No covered AC unit available for a new claim"
-          description={
-            units.length === 0
-              ? "Register the HVAC equipment covered by your plan first."
-              : "Each unit can have one open claim at a time, and it must be covered by your active plan."
-          }
-          action={
-            <ButtonLink href={units.length === 0 ? "/dashboard/ac-units/new" : "/dashboard/ac-units"}>
-              {units.length === 0 ? "Register an AC unit" : "View AC units"}
-            </ButtonLink>
-          }
-        />
-      </div>
-    );
-  }
-
-  function next() {
-    setStepError(null);
-    if (step === 1 && !equipmentCovered) {
-      setStepError(`Your ${plan?.name} plan does not cover this type of equipment.`);
-      return;
-    }
-    if (step === 2) {
-      if (!serviceType) return setStepError("Choose the type of issue.");
-      if (description.trim().length < DESCRIPTION_MIN)
-        return setStepError(`Please describe the issue in at least ${DESCRIPTION_MIN} characters.`);
-    }
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  }
-
-  function back() {
-    setStepError(null);
-    setStep((s) => Math.max(s - 1, 0));
-  }
+  // Availability hints for the chosen address (a preference is allowed either way).
+  const availabilityKey = locationComplete && location ? `${location.state}|${location.zip_code.trim()}` : "";
+  useEffect(() => {
+    if (!availabilityKey) return;
+    const [state, zip] = availabilityKey.split("|");
+    let cancelled = false;
+    fetchAvailability(state, zip, 30)
+      .then((slots) => {
+        if (cancelled) return;
+        const map: Record<string, boolean> = {};
+        for (const slot of slots) map[`${slot.date}|${slot.window}`] = slot.available;
+        setAvailability(map);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailability({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [availabilityKey]);
 
   function addPhotos(files: FileList | null) {
     if (!files) return;
-    const errors: string[] = [];
-    const added: SelectedPhoto[] = [];
+    const problems: string[] = [];
+    const next = [...photos];
     for (const file of Array.from(files)) {
-      if (photos.length + added.length >= MAX_CLAIM_PHOTOS) {
-        errors.push(`You can attach up to ${MAX_CLAIM_PHOTOS} photos.`);
+      if (next.length >= MAX_CLAIM_PHOTOS) {
+        problems.push(`You can attach up to ${MAX_CLAIM_PHOTOS} photos.`);
         break;
       }
       const problem = validatePhoto(file);
       if (problem) {
-        errors.push(`${file.name}: ${problem}`);
+        problems.push(`${file.name}: ${problem}`);
         continue;
       }
-      added.push({
+      next.push({
         key: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
         file,
         preview: URL.createObjectURL(file),
@@ -207,8 +192,8 @@ function NewClaim() {
         status: "ready",
       });
     }
-    setPhotos((current) => [...current, ...added]);
-    setPhotoErrors(errors);
+    setPhotos(next);
+    setPhotoErrors(problems);
   }
 
   function removePhoto(key: string) {
@@ -219,363 +204,390 @@ function NewClaim() {
     });
   }
 
-  function addWindow() {
-    setStepError(null);
-    if (!windowDate) return setStepError("Choose a date.");
-    if (windowDate < minDate || windowDate > maxDate)
-      return setStepError(`Choose a date between today and ${formatWindowDate(maxDate)}.`);
-    if (windows.some((w) => w.date === windowDate && w.window === windowName))
-      return setStepError("That date and time window is already on your list.");
-    if (windows.length >= MAX_PREFERRED_WINDOWS)
-      return setStepError(`You can choose up to ${MAX_PREFERRED_WINDOWS} preferred windows.`);
-    setWindows((current) =>
-      [...current, { date: windowDate, window: windowName }].sort(
-        (a, b) => a.date.localeCompare(b.date) || WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window),
-      ),
-    );
-  }
-
-  function patchPhoto(key: string, changes: Partial<SelectedPhoto>) {
+  function updatePhoto(key: string, changes: Partial<SelectedPhoto>) {
     setPhotos((current) => current.map((p) => (p.key === key ? { ...p, ...changes } : p)));
   }
 
-  async function submit() {
-    if (submittingRef.current || !selected || !serviceType) return;
-    submittingRef.current = true;
-    setSubmitting(true);
-    setSubmitError(null);
+  function validateForm(): Record<string, string> {
+    const problems: Record<string, string> = {};
+    if (!locationComplete) problems.location = "Choose a saved location or enter the full service address.";
+    if (!serviceType) problems.serviceType = "Choose the type of issue.";
+    if (serviceType === "OTHER" && description.trim().length < OTHER_MIN)
+      problems.description = `Please describe the issue in at least ${OTHER_MIN} characters.`;
+    if (!visitDate) problems.visitDate = "Choose a preferred date.";
+    else if (visitDate < tomorrow()) problems.visitDate = "Choose a date from tomorrow onwards.";
+    if (!visitWindow) problems.visitWindow = "Choose a preferred time window.";
+    return problems;
+  }
 
-    let claimId: number;
-    try {
-      const created = await createServiceRequest({
-        ac_unit_id: selected.id,
-        service_type: serviceType,
-        description: description.trim(),
-        preferred_windows: windows,
-      });
-      claimId = created.id;
-    } catch (err) {
-      setSubmitError(errorMessage(err));
-      submittingRef.current = false;
-      setSubmitting(false);
-      return;
-    }
-
-    // The claim exists now; upload photos one by one. Failures don't undo the claim.
+  async function uploadAll(claimId: number): Promise<number> {
     let failed = 0;
     for (const photo of photos) {
-      patchPhoto(photo.key, { status: "uploading", progress: 0 });
+      updatePhoto(photo.key, { status: "uploading", progress: 0 });
       try {
-        const grant = await requestServiceRequestPhotoUpload(claimId, "CUSTOMER", {
+        const ticket = await requestServiceRequestPhotoUpload(claimId, "CUSTOMER", {
           filename: photo.file.name,
           content_type: photo.file.type as PhotoContentType,
           size_bytes: photo.file.size,
         });
-        await postToS3(grant.upload, photo.file, (progress) => patchPhoto(photo.key, { progress }));
-        await confirmPhoto(grant.photo_id);
-        patchPhoto(photo.key, { status: "done", progress: 100 });
+        await postToS3(ticket.upload, photo.file, (progress) => updatePhoto(photo.key, { progress }));
+        await confirmPhoto(ticket.photo_id);
+        updatePhoto(photo.key, { status: "done", progress: 100 });
       } catch {
         failed += 1;
-        patchPhoto(photo.key, { status: "error" });
+        updatePhoto(photo.key, { status: "error" });
       }
     }
-    router.push(`/dashboard/service-requests/${claimId}?created=1${failed ? `&photos_failed=${failed}` : ""}`);
+    return failed;
   }
 
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (inFlight.current) return;
+    setSubmitError(null);
+    const problems = validateForm();
+    setErrors(problems);
+    if (Object.keys(problems).length > 0 || !location || !serviceType || !visitWindow) return;
+
+    inFlight.current = true;
+    setSubmitting(true);
+    try {
+      const where = selectedUnit
+        ? { ac_unit_id: selectedUnit.id }
+        : {
+            address: location.address.trim(),
+            city: location.city.trim(),
+            state: location.state,
+            zip_code: location.zip_code.trim(),
+          };
+      const claim = await createServiceRequest({
+        ...where,
+        service_type: serviceType,
+        description: description.trim(),
+        preferred_windows: [{ date: visitDate, window: visitWindow }],
+      });
+      const failed = photos.length ? await uploadAll(claim.id) : 0;
+      setFailedUploads(failed);
+      setCreated(claim);
+    } catch (err) {
+      setSubmitError(errorMessage(err));
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  if (loadError) return <Alert>{loadError}</Alert>;
+  if (units === null || coverage === null) return <PageLoader label="Loading your plan" />;
+
+  if (!purchase || purchase.status !== "ACTIVE") {
+    return (
+      <div className="space-y-6">
+        <BackLink href="/dashboard/service-requests">Back to claims</BackLink>
+        <EmptyState
+          icon={<ShieldIcon />}
+          title={purchase ? "Your plan isn't active yet" : "No active protection plan"}
+          description={
+            purchase
+              ? "You can open a claim as soon as our team activates your plan."
+              : "Claims are available once you have an active protection plan."
+          }
+          action={
+            <ButtonLink href={purchase ? "/dashboard/my-plan" : "/plans"}>
+              {purchase ? "View my plan" : "Browse plans"}
+            </ButtonLink>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (created) {
+    return (
+      <Card className="mx-auto max-w-xl p-8 text-center" role="status">
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200">
+          <CheckIcon className="h-6 w-6" />
+        </span>
+        <h2 className="mt-5 text-xl font-semibold text-slate-900">Claim submitted</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Reference <span className="font-semibold text-slate-900">#{created.id}</span> - status:{" "}
+          <span className="font-semibold text-slate-900">{REQUEST_STATUS_LABELS[created.status]}</span>
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+          Our team will review it and confirm your appointment once a technician is scheduled.
+        </p>
+        {failedUploads > 0 ? (
+          <div className="mt-4 text-left">
+            <Alert tone="info">
+              {failedUploads} photo{failedUploads === 1 ? "" : "s"} could not be uploaded. You can add
+              {failedUploads === 1 ? " it" : " them"} again from the claim page.
+            </Alert>
+          </div>
+        ) : null}
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          <ButtonLink href={`/dashboard/service-requests/${created.id}`}>View claim</ButtonLink>
+          <ButtonLink href="/dashboard" variant="secondary">
+            Back to dashboard
+          </ButtonLink>
+        </div>
+      </Card>
+    );
+  }
+
+  const today = tomorrow();
   return (
     <div className="space-y-6">
-      {header}
+      <BackLink href="/dashboard/service-requests">Back to claims</BackLink>
+      <PageHeader
+        title="Open a claim"
+        description={`Covered by your ${purchase.plan.name} plan. Tell us where and what the problem is.`}
+      />
 
-      <ol className="flex flex-wrap gap-2" aria-label="Claim steps">
-        {STEPS.map((label, index) => (
-          <li
-            key={label}
-            aria-current={index === step ? "step" : undefined}
-            className={cx(
-              "rounded-full px-3 py-1 text-xs font-semibold ring-1",
-              index === step && "bg-brand-600 text-white ring-brand-600",
-              index < step && "bg-brand-50 text-brand-700 ring-brand-200",
-              index > step && "bg-white text-slate-400 ring-slate-200",
-            )}
-          >
-            {index + 1}. {label}
-          </li>
-        ))}
-      </ol>
+      <Card className="p-5 sm:p-7">
+        <form onSubmit={handleSubmit} noValidate className="space-y-7">
+          {submitError ? <Alert>{submitError}</Alert> : null}
 
-      <Card className="space-y-5 p-5 sm:p-8">
-        {stepError ? <Alert>{stepError}</Alert> : null}
-
-        {step === 0 ? (
-          <>
-            <div className="rounded-lg bg-brand-50 px-4 py-3 text-sm text-brand-900 ring-1 ring-brand-100">
-              Plan: <strong>{plan?.name}</strong> &middot; active
-            </div>
-            <Field label="Covered property and equipment" htmlFor="ac_unit">
-              <Select id="ac_unit" value={selected ? String(selected.id) : ""} onChange={(e) => setUnitId(e.target.value)}>
-                {eligible.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.brand} {unit.model_number} - {unit.address}, {unit.city}
-                  </option>
+          {/* 1. Service location */}
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-900">Service location</h2>
+            {savedLocations.length ? (
+              <div className="grid gap-2">
+                {savedLocations.map((unit) => (
+                  <label
+                    key={unit.id}
+                    className={cx(
+                      "flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-sm",
+                      locationId === String(unit.id) ? "border-brand-500 bg-brand-50/60" : "border-slate-200",
+                      unit.has_open_request && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="location"
+                      className="mt-1"
+                      disabled={unit.has_open_request}
+                      checked={locationId === String(unit.id)}
+                      onChange={() => setLocationId(String(unit.id))}
+                    />
+                    <span>
+                      <span className="block font-medium text-slate-900">{unit.address}</span>
+                      <span className="text-slate-500">
+                        {unit.city}, {unit.state} {unit.zip_code}
+                        {unit.has_open_request ? " - already has an open claim" : ""}
+                      </span>
+                    </span>
+                  </label>
                 ))}
-              </Select>
-            </Field>
-            {selected ? (
-              <dl className="rounded-lg ring-1 ring-slate-200">
-                <div className="px-4">
-                  <DetailRow label="Address">{selected.address}</DetailRow>
-                  <DetailRow label="City">{selected.city}</DetailRow>
-                  <DetailRow label="State / ZIP">
-                    {selected.state} {selected.zip_code}
-                  </DetailRow>
-                  <DetailRow label="Country">United States</DetailRow>
-                </div>
-              </dl>
-            ) : null}
-            <p className="text-sm text-slate-500">
-              Property not listed?{" "}
-              <Link href="/dashboard/ac-units/new" className="font-semibold text-brand-700 hover:underline">
-                Register the equipment
-              </Link>{" "}
-              under your plan first.
-            </p>
-          </>
-        ) : null}
-
-        {step === 1 && selected ? (
-          <>
-            <dl className="rounded-lg ring-1 ring-slate-200">
-              <div className="px-4">
-                <DetailRow label="System type">{AC_TYPE_LABELS[selected.ac_type]}</DetailRow>
-                <DetailRow label="Brand / model">
-                  {selected.brand} {selected.model_number}
-                </DetailRow>
-                <DetailRow label="Serial number">{selected.serial_number ?? "Not provided"}</DetailRow>
+                <label
+                  className={cx(
+                    "flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-sm",
+                    locationId === NEW_ADDRESS ? "border-brand-500 bg-brand-50/60" : "border-slate-200",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="location"
+                    checked={locationId === NEW_ADDRESS}
+                    onChange={() => setLocationId(NEW_ADDRESS)}
+                  />
+                  <span className="font-medium text-slate-900">Use a different address</span>
+                </label>
               </div>
-            </dl>
-            {equipmentCovered ? (
-              <p className="text-sm text-slate-600">
-                {plan?.covered_ac_types
-                  ? "This type of equipment is covered by your plan."
-                  : "Your plan does not restrict equipment types."}{" "}
-                Wrong type?{" "}
-                <Link href={`/dashboard/ac-units/${selected.id}`} className="font-semibold text-brand-700 hover:underline">
-                  Edit the unit
-                </Link>
-                .
-              </p>
-            ) : (
-              <Alert>
-                Your {plan?.name} plan does not cover {AC_TYPE_LABELS[selected.ac_type].toLowerCase()} equipment, so a
-                claim can&apos;t be filed for this unit. Covered types:{" "}
-                {plan?.covered_ac_types?.map((t) => AC_TYPE_LABELS[t]).join(", ")}.
-              </Alert>
-            )}
-          </>
-        ) : null}
+            ) : null}
 
-        {step === 2 ? (
-          <>
-            <Field label="Type of issue" htmlFor="service_type">
-              <Select id="service_type" value={serviceType} onChange={(e) => setServiceType(e.target.value as ServiceType)}>
-                <option value="" disabled>
-                  Choose one
-                </option>
-                {issueOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {SERVICE_TYPE_LABELS[type]}
+            {locationId === NEW_ADDRESS ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Street address" htmlFor="claim-address" className="sm:col-span-2">
+                  <Input
+                    id="claim-address"
+                    autoComplete="street-address"
+                    value={newAddress.address}
+                    onChange={(e) => setNewAddress({ ...newAddress, address: e.target.value })}
+                  />
+                </Field>
+                <Field label="City" htmlFor="claim-city">
+                  <Input
+                    id="claim-city"
+                    autoComplete="address-level2"
+                    value={newAddress.city}
+                    onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="State" htmlFor="claim-state">
+                    <Select
+                      id="claim-state"
+                      value={newAddress.state}
+                      onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                    >
+                      <option value="">Select</option>
+                      {regions.map((r) => (
+                        <option key={r.code} value={r.code}>
+                          {r.code}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="ZIP code" htmlFor="claim-zip">
+                    <Input
+                      id="claim-zip"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      value={newAddress.zip_code}
+                      onChange={(e) => setNewAddress({ ...newAddress, zip_code: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ) : null}
+
+            {locationComplete && location ? (
+              <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-slate-100">
+                <span className="font-medium text-slate-900">Technician visits: </span>
+                {location.address}, {location.city}, {location.state} {location.zip_code}
+              </p>
+            ) : null}
+            {errors.location ? <p className="text-xs font-medium text-rose-600">{errors.location}</p> : null}
+          </section>
+
+          {/* 2. Issue type */}
+          <section className="space-y-3">
+            <Field label="Issue type" htmlFor="claim-issue" error={errors.serviceType}>
+              <Select
+                id="claim-issue"
+                value={serviceType}
+                onChange={(e) => setServiceType(e.target.value as ServiceType)}
+              >
+                <option value="">Choose an issue</option>
+                {ISSUES.map((issue) => (
+                  <option key={issue.value} value={issue.value}>
+                    {issue.label}
                   </option>
                 ))}
               </Select>
             </Field>
-            {plan?.covered_service_types ? (
-              <p className="-mt-3 text-xs text-slate-500">Only issue types covered by your plan are listed.</p>
-            ) : null}
-            <Field
-              label="Describe the issue"
-              htmlFor="description"
-              hint={`${description.trim().length} / ${DESCRIPTION_MAX} - when did it start? Any noises, smells, error codes or water?`}
-            >
-              <Textarea
-                id="description"
-                rows={5}
-                maxLength={DESCRIPTION_MAX}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </Field>
-          </>
-        ) : null}
+          </section>
 
-        {step === 3 ? (
-          <>
-            <p className="text-sm text-slate-600">
-              Reference photos are optional but help our team review the claim.
-              {serviceType && PHOTO_RECOMMENDED.includes(serviceType)
-                ? " For leaks and visible damage they are especially useful."
-                : ""}{" "}
-              Photos can&apos;t show internal faults, so a technician will still inspect the system.
-            </p>
-            <label className="block cursor-pointer rounded-lg border-2 border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600 hover:border-brand-400">
-              <span className="font-semibold text-brand-700">Choose photos</span> - JPEG, PNG or WebP, up to 10 MB each,{" "}
-              {MAX_CLAIM_PHOTOS} max
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                className="sr-only"
-                onChange={(e) => {
-                  addPhotos(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {photoErrors.length ? (
-              <Alert>
-                {photoErrors.map((message) => (
-                  <p key={message}>{message}</p>
-                ))}
-              </Alert>
-            ) : null}
+          {/* 3. Photos */}
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Photos (optional)</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                JPEG, PNG or WebP, up to 10 MB each, {MAX_CLAIM_PHOTOS} photos max.
+              </p>
+            </div>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(e) => {
+                addPhotos(e.target.files);
+                e.target.value = "";
+              }}
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+            />
+            {photoErrors.map((problem) => (
+              <p key={problem} className="text-xs font-medium text-rose-600">
+                {problem}
+              </p>
+            ))}
             {photos.length ? (
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {photos.map((photo) => (
                   <li key={photo.key} className="overflow-hidden rounded-lg ring-1 ring-slate-200">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={photo.preview} alt={photo.file.name} className="h-28 w-full object-cover" />
-                    <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-                      <span className="truncate text-xs text-slate-600">{photo.file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(photo.key)}
-                        className="text-xs font-semibold text-rose-600 hover:underline"
-                      >
-                        Remove
-                      </button>
+                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
+                      <span className="truncate text-slate-600">
+                        {photo.status === "uploading"
+                          ? `${photo.progress}%`
+                          : photo.status === "done"
+                            ? "Uploaded"
+                            : photo.status === "error"
+                              ? "Failed"
+                              : photo.file.name}
+                      </span>
+                      {photo.status === "ready" ? (
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(photo.key)}
+                          className="shrink-0 font-semibold text-rose-600 hover:text-rose-700"
+                          aria-label={`Remove ${photo.file.name}`}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
                   </li>
                 ))}
               </ul>
             ) : null}
-          </>
-        ) : null}
+          </section>
 
-        {step === 4 ? (
-          <>
-            <Alert tone="info">
-              These are your <strong>preferences</strong>, not a booking. Our team confirms the actual visit time with a
-              technician who serves your area. Times are local to the property.
-            </Alert>
-            <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-              <Field label="Date" htmlFor="window-date">
-                <Input id="window-date" type="date" min={minDate} max={maxDate} value={windowDate} onChange={(e) => setWindowDate(e.target.value)} />
+          {/* 4. Preferred appointment */}
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-900">Preferred appointment</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Date" htmlFor="claim-date" error={errors.visitDate}>
+                <Input
+                  id="claim-date"
+                  type="date"
+                  min={today}
+                  value={visitDate}
+                  onChange={(e) => setVisitDate(e.target.value)}
+                />
               </Field>
-              <Field label="Time window" htmlFor="window-name">
-                <Select id="window-name" value={windowName} onChange={(e) => setWindowName(e.target.value as PreferredWindowName)}>
-                  {WINDOWS.map((w) => (
-                    <option key={w} value={w}>
-                      {PREFERRED_WINDOW_LABELS[w]}
-                    </option>
-                  ))}
+              <Field label="Time window" htmlFor="claim-window" error={errors.visitWindow}>
+                <Select
+                  id="claim-window"
+                  value={visitWindow}
+                  onChange={(e) => setVisitWindow(e.target.value as PreferredWindowName)}
+                >
+                  <option value="">Choose a time</option>
+                  {WINDOWS.map((w) => {
+                    const known = visitDate ? availability[`${visitDate}|${w}`] : undefined;
+                    return (
+                      <option key={w} value={w}>
+                        {PREFERRED_WINDOW_LABELS[w]}
+                        {known === true ? " - technician available" : known === false ? " - limited availability" : ""}
+                      </option>
+                    );
+                  })}
                 </Select>
               </Field>
-              <Button type="button" variant="secondary" onClick={addWindow} disabled={windows.length >= MAX_PREFERRED_WINDOWS}>
-                Add
-              </Button>
             </div>
-            {windows.length ? (
-              <ul className="divide-y divide-slate-100 rounded-lg ring-1 ring-slate-200">
-                {windows.map((w) => (
-                  <li key={`${w.date}-${w.window}`} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                    <span>
-                      {formatWindowDate(w.date)} &middot; {PREFERRED_WINDOW_LABELS[w.window]}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-rose-600 hover:underline"
-                      onClick={() => setWindows((current) => current.filter((x) => x !== w))}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-500">
-                Optional - add up to {MAX_PREFERRED_WINDOWS} windows in the next {MAX_PREFERRED_DAYS_AHEAD} days.
-              </p>
-            )}
-          </>
-        ) : null}
+            <p className="text-xs text-slate-500">
+              This is a preferred time. Your appointment is confirmed once we accept the claim and
+              schedule a technician.
+            </p>
+          </section>
 
-        {step === 5 && selected && serviceType ? (
-          <>
-            {submitError ? <Alert>{submitError}</Alert> : null}
-            <dl className="rounded-lg ring-1 ring-slate-200">
-              <div className="px-4">
-                <DetailRow label="Plan">{plan?.name}</DetailRow>
-                <DetailRow label="Property">
-                  {selected.address}, {selected.city}, {selected.state} {selected.zip_code}, United States
-                </DetailRow>
-                <DetailRow label="System">
-                  {AC_TYPE_LABELS[selected.ac_type]} &middot; {selected.brand} {selected.model_number}
-                </DetailRow>
-                <DetailRow label="Issue">{SERVICE_TYPE_LABELS[serviceType]}</DetailRow>
-                <DetailRow label="Photos">{photos.length || "None"}</DetailRow>
-                <DetailRow label="Preferred visits">
-                  {windows.length
-                    ? windows.map((w) => `${formatWindowDate(w.date)} ${w.window.toLowerCase()}`).join(", ")
-                    : "No preference"}
-                </DetailRow>
-              </div>
-            </dl>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Description</p>
-              <p className="mt-1 text-sm whitespace-pre-line text-slate-700">{description.trim()}</p>
-            </div>
-            {submitting && photos.length ? (
-              <ul className="space-y-2">
-                {photos.map((photo) => (
-                  <li key={photo.key} className="text-xs text-slate-600">
-                    <div className="flex justify-between">
-                      <span className="truncate">{photo.file.name}</span>
-                      <span>
-                        {photo.status === "done" ? "Uploaded" : photo.status === "error" ? "Failed" : `${photo.progress}%`}
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-100">
-                      <div
-                        className={cx("h-1.5 rounded-full", photo.status === "error" ? "bg-rose-500" : "bg-brand-500")}
-                        style={{ width: `${photo.status === "error" ? 100 : photo.progress}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </>
-        ) : null}
+          {/* 5. Description */}
+          <Field
+            label={serviceType === "OTHER" ? "Describe the issue" : "Description (optional)"}
+            htmlFor="claim-description"
+            hint={`${description.trim().length} / ${DESCRIPTION_MAX}`}
+            error={errors.description}
+          >
+            <Textarea
+              id="claim-description"
+              rows={4}
+              maxLength={DESCRIPTION_MAX}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Anything that helps the technician, e.g. when it started or error codes."
+            />
+          </Field>
 
-        <div className="flex justify-between gap-2 border-t border-slate-100 pt-5">
-          {step === 0 ? (
-            <ButtonLink href="/dashboard/service-requests" variant="ghost">
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <Link href="/dashboard/service-requests" className="text-sm font-medium text-slate-500 hover:text-slate-800">
               Cancel
-            </ButtonLink>
-          ) : (
-            <Button variant="ghost" onClick={back} disabled={submitting}>
-              Back
+            </Link>
+            <Button type="submit" disabled={submitting} className="sm:min-w-40">
+              {submitting ? (photos.some((p) => p.status === "uploading") ? "Uploading photos..." : "Submitting...") : "Submit Claim"}
             </Button>
-          )}
-          {step < STEPS.length - 1 ? (
-            <Button onClick={next} disabled={step === 1 && !equipmentCovered}>
-              Continue
-            </Button>
-          ) : (
-            <Button onClick={() => void submit()} disabled={submitting}>
-              {submitting ? "Submitting..." : "Submit claim"}
-            </Button>
-          )}
-        </div>
+          </div>
+        </form>
       </Card>
     </div>
   );

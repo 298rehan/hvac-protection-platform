@@ -19,11 +19,13 @@ from app.models import (
     PHOTO_RECOMMENDED_SERVICE_TYPES,
     SERVICE_REQUEST_TRANSITIONS,
     TERMINAL_SERVICE_REQUEST_STATUSES,
+    AcType,
     AcUnit,
     Photo,
     PhotoCategory,
     PhotoStatus,
     PurchaseStatus,
+    ReportedCondition,
     ServiceRequest,
     ServiceRequestStatus as S,
     User,
@@ -112,15 +114,43 @@ def _assert_covered(plan, unit: AcUnit, service_type) -> None:
         )
 
 
-def create_request(db: Session, *, customer: User, payload: ServiceRequestCreate) -> ServiceRequest:
-    unit = ac_unit_service.get_owned(db, payload.ac_unit_id, customer)
+def _unit_for_address(db: Session, customer: User, purchase, payload: ServiceRequestCreate) -> AcUnit:
+    """Reuse the customer's saved location at this address, or add it to their plan."""
+    address, zip_code = payload.address.strip(), payload.zip_code.strip()
+    for unit in db.execute(select(AcUnit).where(AcUnit.customer_id == customer.id)).scalars():
+        if unit.address.strip().lower() == address.lower() and unit.zip_code.strip() == zip_code:
+            if unit.purchase_id != purchase.id:
+                ac_unit_service.attach_to_current_plan(db, unit=unit, customer=customer)
+            return unit
+    ac_unit_service.assert_capacity(db, purchase)
+    unit = AcUnit(
+        customer_id=customer.id,
+        purchase_id=purchase.id,
+        brand="Not specified",
+        model_number="Not specified",
+        ac_type=AcType.OTHER,
+        address=address,
+        city=payload.city.strip(),
+        state=payload.state,
+        zip_code=zip_code,
+        reported_condition=ReportedCondition.UNKNOWN,
+    )
+    db.add(unit)
+    db.flush()
+    return unit
 
-    purchase = ac_unit_service.current_purchase(db, customer.id)
+
+def create_request(db: Session, *, customer: User, payload: ServiceRequestCreate) -> ServiceRequest:
+    purchase = ac_unit_service.current_purchase(db, customer.id, lock=True)
     if purchase is None or purchase.status is not PurchaseStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Service requests need an active protection plan.",
+            detail="Claims need an active protection plan.",
         )
+    if payload.ac_unit_id is not None:
+        unit = ac_unit_service.get_owned(db, payload.ac_unit_id, customer)
+    else:
+        unit = _unit_for_address(db, customer, purchase, payload)
     if unit.purchase_id != purchase.id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -152,7 +182,7 @@ def create_request(db: Session, *, customer: User, payload: ServiceRequestCreate
         request_id=request.id,
         event_type=activity.REQUEST_SUBMITTED,
         actor=customer,
-        description=f"Service request submitted ({payload.service_type.value.replace('_', ' ').lower()}).",
+        description=f"Claim submitted ({payload.service_type.value.replace('_', ' ').lower()}).",
         new_status=S.SUBMITTED,
     )
     db.commit()
@@ -564,6 +594,8 @@ def list_row(request: ServiceRequest, viewer: User) -> ServiceRequestListOut:
         service_type=request.service_type,
         created_at=request.created_at,
         updated_at=request.updated_at,
+        plan_name=request.purchase.plan.name,
+        preferred_windows=request.preferred_windows or [],
         ac_unit=AcUnitBrief.model_validate(request.ac_unit),
         technician=TechnicianBrief.model_validate(tech) if tech else None,
         timezone=state_timezone(request.ac_unit.state),
@@ -597,7 +629,6 @@ def detail(db: Session, request: ServiceRequest, viewer: User) -> ServiceRequest
         customer_decision_note=request.customer_decision_note,
         info_request_note=request.info_request_note,
         info_response_note=request.info_response_note,
-        preferred_windows=request.preferred_windows or [],
         reviewed_at=request.reviewed_at,
         decided_at=request.decided_at,
         assigned_at=request.assigned_at,

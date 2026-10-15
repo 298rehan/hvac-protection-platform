@@ -45,6 +45,9 @@ def _out(db, tech: User) -> TechnicianOut:
         out.service_states = profile.service_states or []
         out.service_zip_prefixes = profile.service_zip_prefixes or []
         out.specialties = profile.specialties or []
+        out.work_days = profile.working_days
+        out.work_start = profile.work_start
+        out.work_end = profile.work_end
     return out
 
 
@@ -125,6 +128,9 @@ def update_technician_profile(
     profile.service_states = payload.service_states
     profile.service_zip_prefixes = payload.service_zip_prefixes
     profile.specialties = [s.value for s in payload.specialties]
+    profile.work_days = payload.work_days
+    profile.work_start = payload.work_start
+    profile.work_end = payload.work_end
     db.add(profile)
     db.commit()
     return _out(db, tech)

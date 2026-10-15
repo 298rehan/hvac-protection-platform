@@ -22,8 +22,13 @@ export function fetchServiceRequestHistory(requestId: number): Promise<ActivityE
   return api.get<ActivityEvent[]>(`/api/service-requests/${requestId}/history`);
 }
 
+/** Open a claim at a saved location (ac_unit_id) or at a service address. */
 export function createServiceRequest(payload: {
-  ac_unit_id: number;
+  ac_unit_id?: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
   service_type: ServiceType;
   description: string;
   preferred_windows: PreferredWindow[];

@@ -33,7 +33,7 @@ def current_purchase(db: Session, customer_id: int, *, lock: bool = False) -> Pu
     return db.execute(stmt).unique().scalars().first()
 
 
-def _assert_capacity(db: Session, purchase: Purchase) -> None:
+def assert_capacity(db: Session, purchase: Purchase) -> None:
     used = db.scalar(
         select(func.count()).select_from(AcUnit).where(AcUnit.purchase_id == purchase.id)
     )
@@ -57,7 +57,7 @@ def create_unit(db: Session, *, customer: User, payload: AcUnitCreate) -> AcUnit
             status_code=status.HTTP_409_CONFLICT,
             detail="Enroll in a protection plan before registering an AC unit.",
         )
-    _assert_capacity(db, purchase)
+    assert_capacity(db, purchase)
 
     unit = AcUnit(customer_id=customer.id, purchase_id=purchase.id, **payload.model_dump())
     db.add(unit)
@@ -79,7 +79,7 @@ def attach_to_current_plan(db: Session, *, unit: AcUnit, customer: User) -> AcUn
             status_code=status.HTTP_409_CONFLICT,
             detail="This AC unit is already covered by your current plan.",
         )
-    _assert_capacity(db, purchase)
+    assert_capacity(db, purchase)
     unit.purchase_id = purchase.id
     db.commit()
     db.refresh(unit)

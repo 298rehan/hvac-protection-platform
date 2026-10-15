@@ -5,8 +5,8 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
-import { AppointmentPanel } from "@/components/appointment-panel";
-import { Field, Select, Textarea } from "@/components/form";
+import { CONFIRMABLE_STATUSES, ConfirmClaimPanel } from "@/components/appointment-panel";
+import { Field, Textarea } from "@/components/form";
 import { ArrowRightIcon, MailIcon, MapPinIcon, PhoneIcon } from "@/components/icons";
 import {
   AcUnitDetails,
@@ -25,7 +25,6 @@ import {
   Button,
   Card,
   CardHeader,
-  CheckIcon,
   DetailRow,
   PageHeader,
   PageLoader,
@@ -41,21 +40,19 @@ import {
 } from "@/lib/service-format";
 import { fetchPurchase } from "@/services/adminService";
 import {
-  approveRequest,
-  assignTechnician,
   cancelRequest,
   fetchHistory,
   fetchServiceRequest,
-  fetchTechnicians,
   rejectRequest,
   requestMoreInfo,
   startReview,
 } from "@/services/serviceRequestService";
-import type { ActivityEvent, PurchaseDetail, ServiceRequestDetail, Technician } from "@/types";
+import type { ActivityEvent, PurchaseDetail, ServiceRequestDetail } from "@/types";
 
-type Dialog = "approve" | "reject" | "info" | "assign" | "cancel" | null;
+type Dialog = "reject" | "info" | "cancel" | null;
 
-const SCHEDULING_STATUSES = ["APPROVED", "ASSIGNED", "SCHEDULED"];
+/** Reject and "request more information" are allowed from these statuses. */
+const REVIEWABLE_STATUSES = ["SUBMITTED", "UNDER_REVIEW"];
 
 export default function ServiceRequestDetailPage() {
   return (
@@ -73,7 +70,6 @@ function ServiceRequestDetailView() {
   const [request, setRequest] = useState<ServiceRequestDetail | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [purchase, setPurchase] = useState<PurchaseDetail | null>(null);
   const [loading, setLoading] = useState(validId);
   const [error, setError] = useState<string | null>(validId ? null : "Invalid request id.");
@@ -83,7 +79,6 @@ function ServiceRequestDetailView() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("");
-  const [technicianId, setTechnicianId] = useState("");
 
   const loadHistory = useCallback(
     () =>
@@ -120,20 +115,11 @@ function ServiceRequestDetailView() {
       .catch(() => setPurchase(null));
   }, [purchaseId]);
 
-  const needsTechnicians = Boolean(request && SCHEDULING_STATUSES.includes(request.status));
-  useEffect(() => {
-    if (!needsTechnicians) return;
-    fetchTechnicians(true)
-      .then(setTechnicians)
-      .catch(() => setTechnicians([]));
-  }, [needsTechnicians]);
-
   const closeDialog = useCallback(() => setDialog(null), []);
 
   function open(next: Dialog) {
     setNote("");
     setReason("");
-    setTechnicianId("");
     setDialog(next);
   }
 
@@ -157,6 +143,12 @@ function ServiceRequestDetailView() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Reject / request-info need UNDER_REVIEW; start the review first if needed. */
+  async function reviewed(id: number, action: () => Promise<ServiceRequestDetail>) {
+    if (request?.status === "SUBMITTED") await startReview(id);
+    return action();
   }
 
   if (loading) return <PageLoader label="Loading claim" />;
@@ -196,10 +188,10 @@ function ServiceRequestDetailView() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
-          {SCHEDULING_STATUSES.includes(status) ? (
-            <AppointmentPanel
+          {CONFIRMABLE_STATUSES.includes(status) ? (
+            <ConfirmClaimPanel
               request={request}
-              onScheduled={(updated, message) => {
+              onConfirmed={(updated, message) => {
                 setRequest(updated);
                 setError(null);
                 setNotice(message);
@@ -255,7 +247,7 @@ function ServiceRequestDetailView() {
           </Card>
 
           <Card>
-            <CardHeader title="AC unit" description="As registered by the customer." />
+            <CardHeader title="Service location & equipment" description={request.customer_address ?? undefined} />
             <div className="space-y-5 px-5 py-4">
               <AcUnitDetails unit={request.ac_unit} />
               <div>
@@ -283,23 +275,11 @@ function ServiceRequestDetailView() {
         </div>
 
         <div className="space-y-6">
-          <Card className={!terminal && ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(status) ? "ring-1 ring-amber-200" : undefined}>
+          <Card>
             <CardHeader title="Actions" description={actionHint(request)} />
             <div className="flex flex-col gap-2 px-5 py-5">
-              {status === "SUBMITTED" ? (
-                <Button
-                  disabled={busy}
-                  onClick={() => run(() => startReview(request.id), "Review started.")}
-                >
-                  Start review
-                </Button>
-              ) : null}
-              {status === "UNDER_REVIEW" ? (
+              {REVIEWABLE_STATUSES.includes(status) ? (
                 <>
-                  <Button disabled={busy} onClick={() => open("approve")}>
-                    <CheckIcon className="h-4 w-4" />
-                    Approve
-                  </Button>
                   <Button variant="secondary" disabled={busy} onClick={() => open("info")}>
                     Request more information
                   </Button>
@@ -307,11 +287,6 @@ function ServiceRequestDetailView() {
                     Reject
                   </Button>
                 </>
-              ) : null}
-              {SCHEDULING_STATUSES.includes(status) ? (
-                <Button variant="secondary" disabled={busy} onClick={() => open("assign")}>
-                  {status === "APPROVED" ? "Assign without a visit time" : "Reassign technician"}
-                </Button>
               ) : null}
               {!terminal ? (
                 <Button variant="subtle" disabled={busy} onClick={() => open("cancel")}>
@@ -436,24 +411,6 @@ function ServiceRequestDetailView() {
         </div>
       </div>
 
-      {dialog === "approve" ? (
-        <Modal
-          title={`Approve claim #${request.id}?`}
-          description="The claim moves to Approved. Schedule a technician visit next."
-          onClose={closeDialog}
-        >
-          <Field label="Note (optional)" htmlFor="approve-note" hint="Visible to the customer.">
-            <Textarea id="approve-note" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
-          </Field>
-          <DialogButtons
-            busy={busy}
-            onCancel={closeDialog}
-            confirmLabel="Approve claim"
-            onConfirm={() => run(() => approveRequest(request.id, note.trim()), "Claim approved.")}
-          />
-        </Modal>
-      ) : null}
-
       {dialog === "reject" ? (
         <Modal
           title={`Reject claim #${request.id}?`}
@@ -480,7 +437,7 @@ function ServiceRequestDetailView() {
             disabled={reason.trim().length < 3}
             onCancel={closeDialog}
             confirmLabel="Reject claim"
-            onConfirm={() => run(() => rejectRequest(request.id, reason.trim()), "Claim rejected.")}
+            onConfirm={() => run(() => reviewed(request.id, () => rejectRequest(request.id, reason.trim())), "Claim rejected.")}
           />
         </Modal>
       ) : null}
@@ -511,49 +468,7 @@ function ServiceRequestDetailView() {
             onCancel={closeDialog}
             confirmLabel="Send request"
             onConfirm={() =>
-              run(() => requestMoreInfo(request.id, reason.trim()), "More information requested from the customer.")
-            }
-          />
-        </Modal>
-      ) : null}
-
-      {dialog === "assign" ? (
-        <Modal
-          title={status === "APPROVED" ? "Assign without a visit time" : "Reassign technician"}
-          description={
-            status === "SCHEDULED"
-              ? "The current technician loses access and the confirmed visit is cancelled. Book a new time afterwards."
-              : status === "ASSIGNED"
-                ? "The current technician loses access to this job. Reassignment is only possible before the inspection starts."
-                : "Prefer the Technician & appointment panel, which only lists technicians who serve this location. This list shows all active technicians."
-          }
-          onClose={closeDialog}
-        >
-          {technicians.length === 0 ? (
-            <Alert tone="info">
-              No active technicians. <Link href="/technicians" className="font-semibold underline">Add one</Link> first.
-            </Alert>
-          ) : (
-            <Field label="Technician" htmlFor="technician">
-              <Select id="technician" value={technicianId} onChange={(e) => setTechnicianId(e.target.value)}>
-                <option value="">Choose a technician…</option>
-                {technicians
-                  .filter((t) => t.id !== request.technician?.id)
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.first_name} {t.last_name} — {t.open_jobs} open job{t.open_jobs === 1 ? "" : "s"}
-                    </option>
-                  ))}
-              </Select>
-            </Field>
-          )}
-          <DialogButtons
-            busy={busy}
-            disabled={!technicianId}
-            onCancel={closeDialog}
-            confirmLabel={status === "APPROVED" ? "Assign" : "Reassign"}
-            onConfirm={() =>
-              run(() => assignTechnician(request.id, Number(technicianId)), "Technician assigned.")
+              run(() => reviewed(request.id, () => requestMoreInfo(request.id, reason.trim())), "More information requested from the customer.")
             }
           />
         </Modal>
@@ -584,17 +499,15 @@ function ServiceRequestDetailView() {
 function actionHint(request: ServiceRequestDetail): string {
   switch (request.status) {
     case "SUBMITTED":
-      return "Start the review to take ownership of this claim.";
     case "UNDER_REVIEW":
-      return "Approve, ask the customer for more information, or reject with a reason.";
+      return "Assign a technician and confirm on the left, ask the customer for more information, or reject with a reason.";
     case "NEEDS_INFO":
       return "Waiting for the customer to provide more information.";
     case "APPROVED":
-      return "Pick a technician and confirm a visit in the panel on the left.";
     case "ASSIGNED":
-      return "A technician is assigned. Book a visit time in the panel on the left.";
+      return "Pick a technician and time on the left, then confirm the claim.";
     case "SCHEDULED":
-      return "Visit confirmed. Waiting for the technician to start the inspection.";
+      return "Confirmed. Waiting for the technician's visit. You can update the appointment on the left.";
     case "INSPECTION_IN_PROGRESS":
       return "The technician is inspecting the unit.";
     case "AWAITING_CUSTOMER_APPROVAL":

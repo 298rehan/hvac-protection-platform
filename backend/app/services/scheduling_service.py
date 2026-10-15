@@ -159,6 +159,80 @@ def area_match(profile: TechnicianProfile | None, state: str, zip_code: str) -> 
     return "zip" if any(zip_code.startswith(p) for p in prefixes) else None
 
 
+DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+SLOT_STEP = timedelta(minutes=30)
+DEFAULT_VISIT_MINUTES = 120
+
+
+def describe_hours(profile: TechnicianProfile) -> str:
+    days = ", ".join(DAY_NAMES[d] for d in profile.working_days)
+    return f"{days} {profile.work_start:%H:%M}-{profile.work_end:%H:%M}"
+
+
+def works_during(profile: TechnicianProfile, start: datetime, end: datetime, tz_name: str) -> bool:
+    """True if [start, end) falls inside the technician's working hours (local time of the job)."""
+    zone = ZoneInfo(tz_name)
+    local_start, local_end = start.astimezone(zone), end.astimezone(zone)
+    return (
+        local_start.date() == local_end.date()
+        and local_start.weekday() in profile.working_days
+        and profile.work_start <= local_start.time()
+        and local_end.time() <= profile.work_end
+    )
+
+
+def _free_slot_between(db: Session, tech_id: int, lo: datetime, hi: datetime, minutes: int,
+                       exclude_request_id: int | None = None, exclude_order_id: int | None = None):
+    """First (start, end) of `minutes` length in [lo, hi) with no confirmed visit, stepping 30 minutes."""
+    now = datetime.now(timezone.utc)
+    length = timedelta(minutes=minutes)
+    start = lo
+    while start + length <= hi:
+        if start > now and not confirmed_overlaps(
+            db, tech_id, start, start + length,
+            exclude_request_id=exclude_request_id, exclude_order_id=exclude_order_id,
+        ):
+            return start, start + length
+        start += SLOT_STEP
+    return None
+
+
+def free_slot_in_window(db: Session, tech_id: int, profile: TechnicianProfile, window: dict, tz_name: str,
+                        minutes: int = DEFAULT_VISIT_MINUTES, *, exclude_request_id: int | None = None,
+                        exclude_order_id: int | None = None):
+    """First free slot inside a preferred window that is also inside working hours."""
+    day = date.fromisoformat(window["date"])
+    if day.weekday() not in profile.working_days:
+        return None
+    zone = ZoneInfo(tz_name)
+    w_start, w_end = window_bounds_utc(window, tz_name)
+    h_start = datetime.combine(day, profile.work_start, tzinfo=zone).astimezone(timezone.utc)
+    h_end = datetime.combine(day, profile.work_end, tzinfo=zone).astimezone(timezone.utc)
+    return _free_slot_between(db, tech_id, max(w_start, h_start), min(w_end, h_end), minutes,
+                              exclude_request_id, exclude_order_id)
+
+
+def next_free_slots(db: Session, tech_id: int, profile: TechnicianProfile, tz_name: str,
+                    minutes: int = DEFAULT_VISIT_MINUTES, *, limit: int = 5, days: int = 14,
+                    exclude_request_id: int | None = None) -> list[dict]:
+    """The next free working-hour slots, at most one per day, starting tomorrow."""
+    zone = ZoneInfo(tz_name)
+    today = datetime.now(zone).date()
+    slots = []
+    for offset in range(1, days + 1):
+        day = today + timedelta(days=offset)
+        if day.weekday() not in profile.working_days:
+            continue
+        lo = datetime.combine(day, profile.work_start, tzinfo=zone).astimezone(timezone.utc)
+        hi = datetime.combine(day, profile.work_end, tzinfo=zone).astimezone(timezone.utc)
+        slot = _free_slot_between(db, tech_id, lo, hi, minutes, exclude_request_id)
+        if slot:
+            slots.append({"start_at": slot[0], "end_at": slot[1]})
+            if len(slots) >= limit:
+                break
+    return slots
+
+
 def _open_jobs(db: Session, technician_id: int) -> int:
     return len(
         db.execute(
@@ -186,10 +260,12 @@ def eligible_technicians(db: Session, request: ServiceRequest) -> list[dict]:
         if match is None:
             continue
         free_windows = []
+        preferred_slot = None
         for window in request.preferred_windows or []:
-            start, end = window_bounds_utc(window, tz_name)
-            if start > now and not confirmed_overlaps(db, tech.id, start, end, exclude_request_id=request.id):
+            slot = free_slot_in_window(db, tech.id, profile, window, tz_name, exclude_request_id=request.id)
+            if slot:
                 free_windows.append(window)
+                preferred_slot = preferred_slot or {"start_at": slot[0], "end_at": slot[1]}
         upcoming = confirmed_overlaps(db, tech.id, now, now + timedelta(days=14))
         specialties = profile.specialties or []
         results.append(
@@ -206,11 +282,17 @@ def eligible_technicians(db: Session, request: ServiceRequest) -> list[dict]:
                 "open_jobs": _open_jobs(db, tech.id),
                 "free_preferred_windows": free_windows,
                 "upcoming_appointments": [{"start_at": a.start_at, "end_at": a.end_at} for a in upcoming],
+                "work_days": profile.working_days,
+                "work_start": profile.work_start,
+                "work_end": profile.work_end,
+                "preferred_slot": preferred_slot,
+                "suggested_slots": next_free_slots(db, tech.id, profile, tz_name, exclude_request_id=request.id),
             }
         )
 
     results.sort(
         key=lambda t: (
+            t["preferred_slot"] is None,
             not t["specialty_match"],
             -len(t["free_preferred_windows"]),
             t["open_jobs"],
@@ -244,20 +326,39 @@ def format_local(moment: datetime, tz_name: str) -> str:
     return local.strftime("%a %d %b %Y, %I:%M %p %Z").replace(" 0", " ")
 
 
-def schedule(
-    db: Session, *, request: ServiceRequest, admin: User, payload: AppointmentIn
-) -> tuple[ServiceRequest, Appointment]:
-    """Assign (if needed) and confirm a visit. `request` must be loaded FOR UPDATE."""
-    from app.services import service_request_service as svc
-
-    if request.status not in (S.APPROVED, S.ASSIGNED, S.SCHEDULED):
+def check_working_hours(profile: TechnicianProfile, tech: User, start: datetime, end: datetime, tz_name: str) -> None:
+    if not works_during(profile, start, end, tz_name):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A visit can only be scheduled for an approved or assigned claim.",
+            detail=(f"That time is outside {tech.first_name}'s working hours "
+                    f"({describe_hours(profile)}, local time). Choose another time or technician."),
+        )
+
+
+def schedule(
+    db: Session, *, request: ServiceRequest, admin: User, payload: AppointmentIn, auto_approve: bool = False
+) -> tuple[ServiceRequest, Appointment]:
+    """Assign (if needed) and confirm a visit. `request` must be loaded FOR UPDATE.
+
+    With auto_approve (the admin's one-step "Confirm Claim"), a submitted or
+    under-review claim is also approved - but only after every check passed,
+    so a failed booking leaves the claim exactly as it was.
+    """
+    from app.services import service_request_service as svc
+
+    allowed = (S.APPROVED, S.ASSIGNED, S.SCHEDULED)
+    if auto_approve:
+        allowed = (S.SUBMITTED, S.UNDER_REVIEW) + allowed
+    if request.status not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(f"A claim that is {svc.STATUS_LABELS[request.status]} cannot be confirmed."
+                    if auto_approve else "A visit can only be scheduled for an approved or assigned claim."),
         )
     tech = svc.get_active_technician(db, payload.technician_id)
     unit = request.ac_unit
-    if area_match(_profile(db, tech.id), unit.state, unit.zip_code) is None:
+    profile = _profile(db, tech.id)
+    if area_match(profile, unit.state, unit.zip_code) is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"{tech.first_name} {tech.last_name} does not serve {unit.city}, {unit.state} {unit.zip_code}.",
@@ -265,6 +366,7 @@ def schedule(
 
     tz_name = request_timezone(request)
     start, end = _visit_bounds(payload, tz_name)
+    check_working_hours(profile, tech, start, end, tz_name)
 
     # Serialise bookings per technician, then check for overlaps.
     db.execute(select(User.id).where(User.id == tech.id).with_for_update())
@@ -278,6 +380,14 @@ def schedule(
                 f"to {format_local(clash.end_at, tz_name)}."
             ),
         )
+
+    # Every check passed: now approve (one-step confirm) and book.
+    if request.status is S.SUBMITTED:
+        svc._transition(db, request, S.UNDER_REVIEW, admin, event_type=activity.REVIEW_STARTED,
+                        description="An administrator reviewed the claim.")
+    if request.status is S.UNDER_REVIEW:
+        svc._transition(db, request, S.APPROVED, admin, event_type=activity.REQUEST_APPROVED,
+                        description="Claim approved.")
 
     rescheduling = request.status is S.SCHEDULED
     if rescheduling:

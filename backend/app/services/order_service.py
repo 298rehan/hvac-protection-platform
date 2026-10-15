@@ -55,6 +55,9 @@ def _not_found(order_id: int) -> HTTPException:
 # --- Availability -----------------------------------------------------------------
 
 
+AVAILABILITY_MINUTES = 60
+
+
 def _area_technicians(db: Session, state: str, zip_code: str) -> list[int]:
     rows = db.execute(
         select(User.id, TechnicianProfile)
@@ -66,11 +69,12 @@ def _area_technicians(db: Session, state: str, zip_code: str) -> list[int]:
 
 def _window_free(db: Session, tech_ids: list[int], day: date, window: PreferredWindow, tz_name: str,
                  exclude_order_id: int | None = None) -> bool:
-    start, end = scheduling_service.window_bounds_utc({"date": day.isoformat(), "window": window.value}, tz_name)
-    if start <= datetime.now(timezone.utc):
-        return False
+    window_dict = {"date": day.isoformat(), "window": window.value}
     return any(
-        not scheduling_service.confirmed_overlaps(db, tech_id, start, end, exclude_order_id=exclude_order_id)
+        scheduling_service.free_slot_in_window(
+            db, tech_id, db.get(TechnicianProfile, tech_id), window_dict, tz_name,
+            AVAILABILITY_MINUTES, exclude_order_id=exclude_order_id,
+        )
         for tech_id in tech_ids
     )
 
@@ -371,14 +375,14 @@ def complete(db: Session, *, order: ServiceOrder, actor: User) -> ServiceOrder:
 
 def eligible_technicians(db: Session, order: ServiceOrder) -> list[dict]:
     tz_name = state_timezone(order.state)
-    start, end = scheduling_service.window_bounds_utc(
-        {"date": order.requested_date.isoformat(), "window": order.requested_window.value}, tz_name
-    )
+    window = {"date": order.requested_date.isoformat(), "window": order.requested_window.value}
     results = []
     for tech_id in _area_technicians(db, order.state, order.zip_code):
         tech = db.get(User, tech_id)
         profile = db.get(TechnicianProfile, tech_id)
-        busy = scheduling_service.confirmed_overlaps(db, tech_id, start, end, exclude_order_id=order.id)
+        busy = not scheduling_service.free_slot_in_window(
+            db, tech_id, profile, window, tz_name, AVAILABILITY_MINUTES, exclude_order_id=order.id,
+        )
         results.append({
             "id": tech.id,
             "first_name": tech.first_name,
@@ -417,6 +421,7 @@ def schedule(db: Session, *, order: ServiceOrder, admin: User, payload: Appointm
         )
     tz_name = state_timezone(order.state)
     start, end = scheduling_service._visit_bounds(payload, tz_name)
+    scheduling_service.check_working_hours(db.get(TechnicianProfile, tech.id), tech, start, end, tz_name)
 
     db.execute(select(User.id).where(User.id == tech.id).with_for_update())
     clashes = scheduling_service.confirmed_overlaps(db, tech.id, start, end, exclude_order_id=order.id, for_booking=True)

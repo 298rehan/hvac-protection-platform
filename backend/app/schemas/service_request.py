@@ -3,7 +3,7 @@
 import re
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.core.regions import US_STATES
 from app.models.enums import (
@@ -17,7 +17,7 @@ from app.models.enums import (
 from app.schemas.ac_unit import AcUnitBrief
 from app.schemas.common import ORMModel
 from app.schemas.photo import PhotoOut
-from app.schemas.user import UserSummary
+from app.schemas.user import UserSummary, _normalise_state
 
 
 def _clean(value: str | None) -> str | None:
@@ -36,9 +36,16 @@ class PreferredWindowIn(BaseModel):
 
 
 class ServiceRequestCreate(BaseModel):
-    ac_unit_id: int = Field(gt=0)
+    """Open a claim: a saved location (registered AC unit) OR a service address."""
+
+    ac_unit_id: int | None = Field(default=None, gt=0)
+    address: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
+    state: str | None = Field(default=None, max_length=2)
+    zip_code: str | None = Field(default=None, max_length=10)
     service_type: ServiceType
-    description: str = Field(min_length=10, max_length=2000)
+    # Optional, except for "Other issue" where it explains the problem.
+    description: str = Field(default="", max_length=2000)
     # Up to 5 preferred visit windows (property local time). Preferences only.
     preferred_windows: list[PreferredWindowIn] = Field(default_factory=list, max_length=5)
 
@@ -49,13 +56,21 @@ class ServiceRequestCreate(BaseModel):
             raise ValueError("Each preferred date and time window can only be chosen once.")
         return value
 
-    @field_validator("description")
+    @field_validator("state")
     @classmethod
-    def _strip(cls, value: str) -> str:
-        value = value.strip()
-        if len(value) < 10:
+    def _state(cls, value: str | None) -> str | None:
+        return _normalise_state(value) if value else None
+
+    @model_validator(mode="after")
+    def _check(self):
+        self.description = self.description.strip()
+        if self.service_type is ServiceType.OTHER and len(self.description) < 10:
             raise ValueError("Please describe the issue in at least 10 characters.")
-        return value
+        if self.ac_unit_id is None:
+            fields = [self.address, self.city, self.state, self.zip_code]
+            if not all(f and f.strip() for f in fields):
+                raise ValueError("Choose a saved location or enter the full service address.")
+        return self
 
 
 class NoteIn(BaseModel):
@@ -168,6 +183,8 @@ class ServiceRequestListOut(BaseModel):
     service_type: ServiceType
     created_at: datetime
     updated_at: datetime
+    plan_name: str = ""
+    preferred_windows: list[PreferredWindowOut] = Field(default_factory=list)
     ac_unit: AcUnitBrief
     technician: TechnicianBrief | None = None
     # Property time zone and the confirmed visit, if any.
@@ -187,7 +204,6 @@ class ServiceRequestDetailOut(ServiceRequestListOut):
     customer_decision_note: str | None
     info_request_note: str | None = None
     info_response_note: str | None = None
-    preferred_windows: list[PreferredWindowOut] = Field(default_factory=list)
     reviewed_at: datetime | None
     decided_at: datetime | None
     assigned_at: datetime | None
@@ -240,11 +256,30 @@ _ZIP_PREFIX = re.compile(r"^\d{3,5}$")
 
 
 class TechnicianProfileIn(BaseModel):
-    """Where a technician works and what equipment they specialise in."""
+    """Where and when a technician works, and what equipment they specialise in."""
 
     service_states: list[str] = Field(default_factory=list, max_length=60)
     service_zip_prefixes: list[str] = Field(default_factory=list, max_length=200)
     specialties: list[AcType] = Field(default_factory=list)
+    # Monday=0 ... Sunday=6, local time of the job address.
+    work_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4], min_length=1, max_length=7)
+    work_start: time = time(8, 0)
+    work_end: time = time(17, 0)
+
+    @field_validator("work_days")
+    @classmethod
+    def _days(cls, value: list[int]) -> list[int]:
+        if any(d < 0 or d > 6 for d in value):
+            raise ValueError("Working days must be 0 (Monday) to 6 (Sunday).")
+        return sorted(set(value))
+
+    @field_validator("work_end")
+    @classmethod
+    def _hours(cls, value: time, info) -> time:
+        start = info.data.get("work_start")
+        if start is not None and value <= start:
+            raise ValueError("Working hours must end after they start.")
+        return value
 
     @field_validator("service_states")
     @classmethod
@@ -282,6 +317,9 @@ class TechnicianOut(ORMModel):
     service_states: list[str] = Field(default_factory=list)
     service_zip_prefixes: list[str] = Field(default_factory=list)
     specialties: list[AcType] = Field(default_factory=list)
+    work_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    work_start: time = time(8, 0)
+    work_end: time = time(17, 0)
 
 
 class BusySlot(BaseModel):
@@ -306,3 +344,11 @@ class EligibleTechnicianOut(BaseModel):
     free_preferred_windows: list[PreferredWindowOut]
     # Confirmed visits in the next 14 days (for the admin's calendar check).
     upcoming_appointments: list[BusySlot]
+    work_days: list[int]
+    work_start: time
+    work_end: time
+    # First free slot inside the customer's preferred window(s), if any - the
+    # admin panel preselects it.
+    preferred_slot: BusySlot | None = None
+    # Next free slots within working hours (alternatives).
+    suggested_slots: list[BusySlot] = Field(default_factory=list)

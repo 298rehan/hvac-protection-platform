@@ -17,11 +17,12 @@ import {
 import { SearchInput, Select } from "@/components/form";
 import { ChevronRightIcon, WrenchIcon } from "@/components/icons";
 import { ServiceStatusBadge } from "@/components/service-ui";
-import { Alert, Avatar, Button, PageHeader } from "@/components/ui";
+import { Alert, Button, PageHeader } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { cx, formatDate } from "@/lib/format";
 import {
   formatInZone,
+  formatPreferredWindow,
   SERVICE_TYPE_LABELS,
   SR_STATUS_LABELS,
   SR_STATUSES,
@@ -150,6 +151,7 @@ function ServiceRequestList() {
         <TableSkeleton columns={8} />
       ) : (
         <TableCard
+          tableClassName="min-w-[64rem]"
           footer={
             requests.length > 0 || offset > 0 ? (
               <div className="flex items-center justify-between gap-3">
@@ -179,13 +181,13 @@ function ServiceRequestList() {
           }
         >
           <THead>
-            <Th>Ref</Th>
+            <Th>Claim</Th>
             <Th>Customer</Th>
-            <Th>AC unit</Th>
+            <Th>Plan</Th>
             <Th>Issue</Th>
+            <Th>Service location</Th>
+            <Th>Preferred appointment</Th>
             <Th>Status</Th>
-            <Th>Technician</Th>
-            <Th>Visit</Th>
             <Th>Submitted</Th>
             <Th>
               <span className="sr-only">Actions</span>
@@ -203,46 +205,32 @@ function ServiceRequestList() {
                 const needsAction = NEEDS_ACTION.includes(request.status);
                 return (
                   <Tr key={request.id} className={needsAction ? "bg-amber-50/30" : undefined}>
-                    <Td className="font-semibold text-slate-900">#{request.id}</Td>
                     <Td>
-                      {request.customer ? (
-                        <div className="flex items-center gap-3">
-                          <Avatar
-                            firstName={request.customer.first_name}
-                            lastName={request.customer.last_name}
-                            size="sm"
-                          />
-                          <div className="min-w-0">
-                            <Link
-                              href={`/customers/${request.customer.id}`}
-                              className="font-medium text-slate-900 hover:text-brand-700"
-                            >
-                              {request.customer.first_name} {request.customer.last_name}
-                            </Link>
-                            <p className="text-xs text-slate-500">{request.customer.email}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        "—"
-                      )}
+                      <Link
+                        href={`/service-requests/${request.id}`}
+                        className="font-semibold text-brand-700 hover:text-brand-800 hover:underline"
+                      >
+                        #{request.id}
+                      </Link>
                     </Td>
-                    <Td>
-                      <span className="font-medium text-slate-900">{request.ac_unit.brand}</span>{" "}
-                      <span className="text-slate-500">{request.ac_unit.model_number}</span>
+                    <Td className="font-medium text-slate-900">
+                      {request.customer ? `${request.customer.first_name} ${request.customer.last_name}` : "—"}
                     </Td>
+                    <Td className="text-slate-600">{request.plan_name || "—"}</Td>
                     <Td>{SERVICE_TYPE_LABELS[request.service_type]}</Td>
-                    <Td>
-                      <ServiceStatusBadge status={request.status} size="sm" />
+                    <Td className="text-slate-600">
+                      {request.ac_unit.city}, {request.ac_unit.state} {request.ac_unit.zip_code}
                     </Td>
                     <Td className="text-slate-600">
-                      {request.technician
-                        ? `${request.technician.first_name} ${request.technician.last_name}`
-                        : "—"}
+                      {request.preferred_windows.length ? formatPreferredWindow(request.preferred_windows[0]) : "—"}
+                      {request.appointment ? (
+                        <p className="text-xs font-medium text-teal-700">
+                          Booked {formatInZone(request.appointment.start_at, request.appointment.timezone)}
+                        </p>
+                      ) : null}
                     </Td>
-                    <Td className="whitespace-nowrap text-slate-600">
-                      {request.appointment
-                        ? formatInZone(request.appointment.start_at, request.appointment.timezone)
-                        : "—"}
+                    <Td>
+                      <ServiceStatusBadge status={request.status} size="sm" />
                     </Td>
                     <Td className="text-slate-500">{formatDate(request.created_at)}</Td>
                     <Td className="text-right">

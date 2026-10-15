@@ -186,11 +186,13 @@ health. Keep the original database until you are sure.
 (Verified locally: a backup taken by this script restored into a fresh
 MySQL 8.0.46 database with every row and the original revision.)
 
-## 5. Fixing the current mismatch (production at 0003, code at 0004)
+## 5. Fixing the current mismatch (production at 0003, code now at 0005)
 
 Nothing manual is needed beyond the one-time setup above. Push this change
-(or re-run the failed workflow after pushing it). The deploy backs up,
-applies `0004_service_marketplace`, verifies it and deploys.
+(or re-run the failed workflow after pushing it). The deploy backs up once,
+applies `0004_service_marketplace` then `0005_technician_hours` in order,
+verifies the database is at the head and deploys. (Verified on a disposable
+MySQL 8.0.46 starting from 0003 with an existing technician profile.)
 
 To do it by hand instead, migrating without redeploying the frontends:
 
@@ -365,6 +367,25 @@ terraform -chdir=terraform init -backend=false && terraform -chdir=terraform val
 Claims are the existing `service_requests` records (shown as "Claims" in both
 apps; URLs unchanged).
 
+**Simplified flow:**
+* **Customer** (My Plan → *Open a Claim*): one form with the service location
+  (a saved location, or the profile address, which can be corrected), issue
+  type, photos, a preferred date and time window, an optional description
+  (required for "Other issue"), and *Submit Claim*. A new address is saved as a
+  location on the plan within its unit limit. Browser GPS is not used: there is
+  no geocoding service, and coordinates are not an address.
+* **Admin** (Claims → open a claim): everything on one page. The *Assign
+  technician & confirm* panel preselects a technician who is free in the
+  customer's preferred window within working hours, or offers alternative slots.
+  *Confirm Claim* (`POST /api/service-requests/{id}/confirm`) re-checks service
+  area, working hours and overlaps under a row lock, then approves, assigns and
+  books in one transaction. If any check fails, the claim is unchanged.
+* **Technician working hours:** Admin → Technicians → Service area. Days and
+  start/end time are in the local time of the job address. Existing
+  technicians default to Mon–Fri 08:00–17:00 (migration `0005_technician_hours`,
+  applied automatically by the deploy). The same rule applies to marketplace
+  orders and the customer availability hints.
+
 * **Eligibility:** an ACTIVE purchase (admin-confirmed) and an AC unit covered by
   it. Plan coverage rules `covered_ac_types` / `covered_service_types` are
   enforced when set; **they are NULL (not restricted) until the business defines
@@ -385,8 +406,8 @@ apps; URLs unchanged).
   technician row and re-check with a locking read, which is proven by
   `tests/test_booking_race.py` on MySQL. The customer and technician get an
   email through the existing EMAIL_MODE settings (console/file/smtp).
-* **Availability** means "no conflicting confirmed visit". Working hours,
-  holidays and travel time are not modelled yet.
+* **Availability** means "inside the technician's working hours and no
+  conflicting confirmed visit". Holidays and travel time are not modelled yet.
 
 ## Service marketplace and Custom Plan Builder
 

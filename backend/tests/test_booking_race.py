@@ -28,7 +28,8 @@ def test_simultaneous_overlapping_bookings(client, db):
 
     admin = make_user(db, UserRole.ADMIN, "admin@example.com")
     tech = make_user(db, UserRole.TECHNICIAN, "tech@example.com", state="TX")
-    db.add(TechnicianProfile(user_id=tech.id, service_states=["TX"], service_zip_prefixes=[], specialties=[]))
+    db.add(TechnicianProfile(user_id=tech.id, service_states=["TX"], service_zip_prefixes=[], specialties=[],
+                             work_days=list(range(7)), work_start=time(6), work_end=time(21)))
     db.commit()
     request_ids = []
     for i in range(2):
@@ -94,7 +95,8 @@ def test_simultaneous_duplicate_checkout_creates_one_order(client, db):
 
     customer = make_user(db, UserRole.CUSTOMER, "buyer@example.com", state="TX")
     tech = make_user(db, UserRole.TECHNICIAN, "tech2@example.com", state="TX")
-    db.add(TechnicianProfile(user_id=tech.id, service_states=["TX"], service_zip_prefixes=[], specialties=[]))
+    db.add(TechnicianProfile(user_id=tech.id, service_states=["TX"], service_zip_prefixes=[], specialties=[],
+                             work_days=list(range(7)), work_start=time(6), work_end=time(21)))
     category = ServiceCategory(name="Servicing", slug="servicing", description="", icon="wrench")
     db.add(category)
     db.flush()

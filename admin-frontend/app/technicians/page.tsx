@@ -19,7 +19,7 @@ import { Modal } from "@/components/service-ui";
 import { Alert, Avatar, Button, PageHeader, TogglePill } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { cx, formatDate } from "@/lib/format";
-import { AC_TYPE_LABELS } from "@/lib/service-format";
+import { AC_TYPE_LABELS, formatWorkingHours } from "@/lib/service-format";
 import { fetchRegions } from "@/services/adminService";
 import {
   createTechnician,
@@ -30,6 +30,7 @@ import {
 import type { AcType, Region, Technician } from "@/types";
 
 const AC_TYPES = Object.keys(AC_TYPE_LABELS) as AcType[];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const EMPTY_FORM = { first_name: "", last_name: "", email: "", phone: "", password: "" };
 
@@ -106,6 +107,10 @@ function TechnicianList() {
         <TableSkeleton columns={7} rows={4} />
       ) : (
         <TableCard
+          // table-fixed only applies with an explicit width (w-full); the min width
+          // fits a 1366px laptop and makes narrower screens scroll sideways
+          // instead of squeezing columns.
+          tableClassName="w-full min-w-[63rem] table-fixed"
           footer={
             technicians.length > 0
               ? `${technicians.length} technician${technicians.length === 1 ? "" : "s"}`
@@ -113,15 +118,13 @@ function TechnicianList() {
           }
         >
           <THead>
-            <Th>Technician</Th>
-            <Th>Phone</Th>
-            <Th>Service area</Th>
-            <Th>Status</Th>
-            <Th className="text-right">Open jobs</Th>
-            <Th>Added</Th>
-            <Th>
-              <span className="sr-only">Actions</span>
-            </Th>
+            <Th className="w-[13.5rem]">Technician</Th>
+            <Th className="w-[8rem]">Phone</Th>
+            <Th className="w-[14rem]">Service area</Th>
+            <Th className="w-[7.5rem]">Status</Th>
+            <Th className="w-[5rem] text-right">Open jobs</Th>
+            <Th className="w-[6.5rem]">Added</Th>
+            <Th className="w-[8.5rem] text-right">Actions</Th>
           </THead>
           <TBody>
             {technicians.length === 0 ? (
@@ -134,56 +137,68 @@ function TechnicianList() {
               technicians.map((tech) => (
                 <Tr key={tech.id}>
                   <Td>
-                    <div className="flex items-center gap-3">
-                      <Avatar firstName={tech.first_name} lastName={tech.last_name} size="sm" />
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="shrink-0">
+                        <Avatar firstName={tech.first_name} lastName={tech.last_name} size="sm" />
+                      </span>
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-900">
+                        <p className="truncate font-medium text-slate-900">
                           {tech.first_name} {tech.last_name}
                         </p>
-                        <p className="text-xs text-slate-500">{tech.email}</p>
+                        <p className="truncate text-xs text-slate-500" title={tech.email}>
+                          {tech.email}
+                        </p>
                       </div>
                     </div>
                   </Td>
-                  <Td>{tech.phone ?? "—"}</Td>
-                  <Td className="max-w-xs">
+                  <Td className="truncate">{tech.phone ?? "—"}</Td>
+                  <Td className="whitespace-normal break-words">
                     {tech.service_states.length ? (
-                      <div className="text-sm">
-                        <p className="font-medium text-slate-800">{tech.service_states.join(", ")}</p>
+                      <div className="space-y-0.5 text-sm">
+                        <p className="line-clamp-2 font-medium text-slate-800" title={tech.service_states.join(", ")}>
+                          {tech.service_states.join(", ")}
+                        </p>
                         <p className="text-xs text-slate-500">
                           {tech.service_zip_prefixes.length
-                            ? `ZIP ${tech.service_zip_prefixes.join(", ")}`
+                            ? `${tech.service_zip_prefixes.length} ZIP prefix${tech.service_zip_prefixes.length === 1 ? "" : "es"}`
                             : "Whole state"}
-                          {tech.specialties.length
-                            ? ` · ${tech.specialties.map((s) => AC_TYPE_LABELS[s]).join(", ")}`
-                            : " · General HVAC"}
+                          {" · "}
+                          {formatWorkingHours(tech.work_days, tech.work_start, tech.work_end)}
                         </p>
+                        <button
+                          type="button"
+                          onClick={() => setEditingArea(tech)}
+                          className="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                        >
+                          View details
+                        </button>
                       </div>
                     ) : (
                       <span className="text-sm text-amber-700">Not configured</span>
                     )}
                   </Td>
                   <Td>
-                    <TogglePill on={tech.is_active} onLabel="Active" offLabel="Deactivated" />
+                    <span className="inline-flex shrink-0">
+                      <TogglePill on={tech.is_active} onLabel="Active" offLabel="Deactivated" />
+                    </span>
                   </Td>
                   <Td className="text-right tabular-nums">{tech.open_jobs}</Td>
                   <Td className="text-slate-500">{formatDate(tech.created_at)}</Td>
-                  <Td className="whitespace-nowrap text-right">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="mr-2"
-                      onClick={() => setEditingArea(tech)}
-                    >
-                      Service area
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={tech.is_active ? "subtle" : "secondary"}
-                      disabled={busyId === tech.id}
-                      onClick={() => toggleActive(tech)}
-                    >
-                      {tech.is_active ? "Deactivate" : "Reactivate"}
-                    </Button>
+                  <Td className="text-right">
+                    <div className="flex flex-col items-stretch gap-1.5">
+                      <Button size="sm" variant="secondary" className="shrink-0" onClick={() => setEditingArea(tech)}>
+                        Service area
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={tech.is_active ? "subtle" : "secondary"}
+                        className="shrink-0"
+                        disabled={busyId === tech.id}
+                        onClick={() => toggleActive(tech)}
+                      >
+                        {tech.is_active ? "Deactivate" : "Reactivate"}
+                      </Button>
+                    </div>
                   </Td>
                 </Tr>
               ))
@@ -324,6 +339,9 @@ function ServiceAreaDialog({
   const [states, setStates] = useState<string[]>(technician.service_states);
   const [zips, setZips] = useState(technician.service_zip_prefixes.join(", "));
   const [specialties, setSpecialties] = useState<AcType[]>(technician.specialties);
+  const [workDays, setWorkDays] = useState<number[]>(technician.work_days ?? [0, 1, 2, 3, 4]);
+  const [workStart, setWorkStart] = useState((technician.work_start ?? "08:00").slice(0, 5));
+  const [workEnd, setWorkEnd] = useState((technician.work_end ?? "17:00").slice(0, 5));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -352,12 +370,23 @@ function ServiceAreaDialog({
       setError("Choose at least one state for these ZIP prefixes.");
       return;
     }
+    if (workDays.length === 0) {
+      setError("Choose at least one working day.");
+      return;
+    }
+    if (!workStart || !workEnd || workEnd <= workStart) {
+      setError("Working hours must end after they start.");
+      return;
+    }
     setSaving(true);
     try {
       const updated = await updateTechnicianProfile(technician.id, {
         service_states: states,
         service_zip_prefixes: prefixes,
         specialties,
+        work_days: [...workDays].sort((a, b) => a - b),
+        work_start: workStart,
+        work_end: workEnd,
       });
       onSaved(updated);
     } catch (err) {
@@ -369,7 +398,7 @@ function ServiceAreaDialog({
   return (
     <Modal
       title={`Service area: ${technician.first_name} ${technician.last_name}`}
-      description="Claims are matched to technicians by the property's state and, if set, its ZIP prefix. The technician's home address is not used."
+      description="Claims are matched to technicians by the property's state and, if set, its ZIP prefix. Visits can only be booked inside the working hours below (local time of the job). The technician's home address is not used."
       onClose={onClose}
     >
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -422,6 +451,44 @@ function ServiceAreaDialog({
         </Field>
 
         <fieldset>
+          <legend className="text-sm font-medium text-slate-700">Working days and hours</legend>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {DAYS.map((label, day) => {
+              const checked = workDays.includes(day);
+              return (
+                <label
+                  key={label}
+                  className={cx(
+                    "flex cursor-pointer items-center rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-inset transition-colors",
+                    checked ? "bg-brand-600 text-white ring-brand-600" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() => setWorkDays((list) => toggle(list, day))}
+                  />
+                  {label}
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Field label="Start" htmlFor="work-start">
+              <Input id="work-start" type="time" step={900} value={workStart} onChange={(e) => setWorkStart(e.target.value)} />
+            </Field>
+            <Field
+              label="End"
+              htmlFor="work-end"
+              error={workStart && workEnd && workEnd <= workStart ? "Must be after the start time." : undefined}
+            >
+              <Input id="work-end" type="time" step={900} value={workEnd} onChange={(e) => setWorkEnd(e.target.value)} />
+            </Field>
+          </div>
+        </fieldset>
+
+        <fieldset>
           <legend className="text-sm font-medium text-slate-700">Specialties (optional)</legend>
           <p className="mt-0.5 text-xs text-slate-500">Used to rank matching technicians. Leave empty for general HVAC.</p>
           <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
@@ -444,7 +511,7 @@ function ServiceAreaDialog({
             Cancel
           </Button>
           <Button type="submit" disabled={saving || regions === null}>
-            {saving ? "Saving…" : "Save service area"}
+            {saving ? "Saving…" : "Save"}
           </Button>
         </div>
       </form>

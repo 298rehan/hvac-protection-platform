@@ -9,8 +9,11 @@ export function TableCard({
   children,
   header,
   footer,
+  tableClassName,
 }: {
   children: ReactNode;
+  /** Extra classes for the <table>, e.g. a min width so narrow screens scroll. */
+  tableClassName?: string;
   /** Optional title / toolbar row rendered above the table. */
   header?: ReactNode;
   /** Optional row rendered below the table, e.g. a result count. */
@@ -20,7 +23,7 @@ export function TableCard({
     <Card className="overflow-hidden">
       {header}
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">{children}</table>
+        <table className={cx("min-w-full text-sm", tableClassName)}>{children}</table>
       </div>
       {footer ? (
         <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-xs text-slate-500">

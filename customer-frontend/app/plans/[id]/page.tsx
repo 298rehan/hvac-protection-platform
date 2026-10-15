@@ -179,8 +179,8 @@ export default function PlanDetailsPage() {
 
                 <p className="mt-4 flex gap-2 text-xs leading-relaxed text-slate-500">
                   <LockIcon className="h-4 w-4 text-slate-400" />
-                  Demo checkout. Enrolling creates a pending request for our team to review
-                  and never charges a card.
+                  No payment is taken today. Your enrollment is reviewed by our team and
+                  you&apos;ll be notified when your coverage is active.
                 </p>
               </div>
             </Card>

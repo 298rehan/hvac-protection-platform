@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { TechnicianShell } from "@/components/admin-shell";
 import { Field, Textarea } from "@/components/form";
-import { MailIcon, MapPinIcon, PhoneIcon } from "@/components/icons";
+import { MapPinIcon, PhoneIcon } from "@/components/icons";
 import { PhotoUploader } from "@/components/photo-uploader";
 import {
   AcUnitDetails,
@@ -344,10 +344,6 @@ function JobDetail() {
                     <li className="flex items-center gap-2.5">
                       <PhoneIcon className="h-4 w-4 text-slate-400" />
                       {job.customer.phone ?? "—"}
-                    </li>
-                    <li className="flex items-center gap-2.5 break-all">
-                      <MailIcon className="h-4 w-4 text-slate-400" />
-                      {job.customer.email}
                     </li>
                     <li className="flex items-start gap-2.5">
                       <MapPinIcon className="mt-0.5 h-4 w-4 text-slate-400" />

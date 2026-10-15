@@ -280,6 +280,9 @@ export interface ServiceRequestListItem {
   service_type: ServiceType;
   created_at: string;
   updated_at: string;
+  plan_name: string;
+  /** Customer preferences (property local time), not confirmed visits. */
+  preferred_windows: PreferredWindow[];
   ac_unit: AcUnitBrief;
   technician: TechnicianBrief | null;
   /** Property's IANA time zone. */
@@ -299,7 +302,6 @@ export interface ServiceRequestDetail extends ServiceRequestListItem {
   customer_decision_note: string | null;
   info_request_note: string | null;
   info_response_note: string | null;
-  preferred_windows: PreferredWindow[];
   reviewed_at: string | null;
   decided_at: string | null;
   assigned_at: string | null;
@@ -349,12 +351,27 @@ export interface Technician {
   service_states: string[];
   service_zip_prefixes: string[];
   specialties: AcType[];
+  /** Monday=0 ... Sunday=6, local time of the job address. */
+  work_days: number[];
+  /** "HH:MM:SS" */
+  work_start: string;
+  work_end: string;
 }
 
 export interface TechnicianProfilePayload {
   service_states: string[];
   service_zip_prefixes: string[];
   specialties: AcType[];
+  work_days: number[];
+  /** "HH:MM" */
+  work_start: string;
+  work_end: string;
+}
+
+export interface TimeSlot {
+  /** UTC ISO timestamps. */
+  start_at: string;
+  end_at: string;
 }
 
 export interface EligibleTechnician {
@@ -369,7 +386,14 @@ export interface EligibleTechnician {
   specialty_match: boolean;
   open_jobs: number;
   free_preferred_windows: PreferredWindow[];
-  upcoming_appointments: { start_at: string; end_at: string }[];
+  upcoming_appointments: TimeSlot[];
+  work_days: number[];
+  work_start: string;
+  work_end: string;
+  /** First free slot inside the customer's preferred window(s), or null. */
+  preferred_slot: TimeSlot | null;
+  /** Next free working-hour slots (alternatives). */
+  suggested_slots: TimeSlot[];
 }
 
 export interface AppointmentPayload {

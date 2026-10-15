@@ -71,6 +71,11 @@ export function scheduleAppointment(id: number, payload: AppointmentPayload) {
   return api.post<ServiceRequestDetail>(`${base(id)}/appointment`, payload);
 }
 
+/** One step: approve (if needed), assign and book. Nothing changes if any check fails. */
+export function confirmClaim(id: number, payload: AppointmentPayload) {
+  return api.post<ServiceRequestDetail>(`${base(id)}/confirm`, payload);
+}
+
 export function cancelRequest(id: number, note?: string) {
   return api.post<ServiceRequestDetail>(`${base(id)}/cancel`, { note: note || null });
 }

@@ -224,9 +224,13 @@ export function RequestIssue({ request }: { request: ServiceRequestDetail }) {
         description={`${SERVICE_TYPE_LABELS[request.service_type]} · submitted ${formatDateTime(request.created_at)}`}
       />
       <div className="space-y-5 px-5 py-5">
-        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
-          {request.description}
-        </p>
+        {request.description ? (
+          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+            {request.description}
+          </p>
+        ) : (
+          <p className="text-sm text-slate-500">No description provided (optional for this issue type).</p>
+        )}
         {request.photo_recommended ? (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500 ring-1 ring-slate-100">
             Photos help with leaks and visible damage, but they cannot show internal faults. A

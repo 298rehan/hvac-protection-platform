@@ -37,7 +37,9 @@ def act(client, user, request_id, action, body=None):
 def set_area(client, admin, tech, states, zips=(), specialties=()):
     response = client.put(
         f"/api/technicians/{tech.id}/profile",
-        json={"service_states": list(states), "service_zip_prefixes": list(zips), "specialties": list(specialties)},
+        json={"service_states": list(states), "service_zip_prefixes": list(zips), "specialties": list(specialties),
+              # Every day, long hours: keeps date-relative tests independent of the weekday.
+              "work_days": list(range(7)), "work_start": "06:00", "work_end": "21:00"},
         headers=headers(admin),
     )
     assert response.status_code == 200, response.text

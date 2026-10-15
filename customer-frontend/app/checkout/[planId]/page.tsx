@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { InfoIcon, MapPinIcon } from "@/components/icons";
+import { MapPinIcon } from "@/components/icons";
 import { RequireAuth } from "@/components/require-auth";
 import {
   Alert,
@@ -131,18 +131,6 @@ function Checkout() {
     <Shell>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
-          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-            <InfoIcon className="mt-px h-5 w-5 text-amber-500" />
-            <div>
-              <p className="text-sm font-semibold text-amber-900">Demo checkout</p>
-              <p className="mt-1 text-sm leading-relaxed text-amber-800">
-                This is a simulated checkout for a portfolio project. No payment gateway
-                is contacted, no card details are collected, and nothing is charged.
-                Submitting creates a pending enrollment for our team to review.
-              </p>
-            </div>
-          </div>
-
           <Card>
             <Step number={1} title="Service address">
               <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-700 sm:flex-row sm:items-start sm:justify-between">
@@ -207,9 +195,8 @@ function Checkout() {
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 accent-brand-600"
                 />
                 <span className="text-sm leading-relaxed text-slate-700">
-                  I understand this is a demonstration enrollment, that no payment will be
-                  taken, and that my plan becomes active only after our service team
-                  approves it.
+                  I understand that no payment is taken today and that my plan becomes
+                  active once our service team has reviewed and approved my enrollment.
                 </span>
               </label>
 

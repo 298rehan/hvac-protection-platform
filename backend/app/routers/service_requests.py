@@ -264,6 +264,11 @@ def schedule_appointment(
     """Times are in the property's local time zone. Rejects overlapping visits."""
     request = svc.get_for_viewer(db, request_id, admin, lock=True)
     request, appointment = scheduling_service.schedule(db, request=request, admin=admin, payload=payload)
+    _queue_visit_emails(background, request, appointment)
+    return _done(db, request, admin, background)
+
+
+def _queue_visit_emails(background: BackgroundTasks, request, appointment) -> None:
     unit, tech, customer = request.ac_unit, appointment.technician, request.customer
     background.add_task(
         notifications.send_appointment_confirmed_emails,
@@ -277,6 +282,23 @@ def schedule_appointment(
         customer_email=customer.email,
         customer_first_name=customer.first_name,
     )
+
+
+@router.post(
+    "/{request_id}/confirm",
+    response_model=ServiceRequestDetailOut,
+    summary="Confirm a claim: approve, assign a technician and book the visit in one step (admin)",
+)
+def confirm_claim(
+    request_id: int, payload: AppointmentIn, db: DbSession, admin: AdminUser, background: BackgroundTasks
+):
+    """Every check (technician, service area, working hours, overlapping visits)
+    runs before anything changes; if one fails the claim is left untouched."""
+    request = svc.get_for_viewer(db, request_id, admin, lock=True)
+    request, appointment = scheduling_service.schedule(
+        db, request=request, admin=admin, payload=payload, auto_approve=True
+    )
+    _queue_visit_emails(background, request, appointment)
     return _done(db, request, admin, background)
 
 

@@ -87,9 +87,14 @@ export default function MyPlanPage() {
         }
         description={STATUS_DESCRIPTIONS[purchase.status]}
         actions={
-          <ButtonLink href="/plans" variant="secondary">
-            Compare other plans
-          </ButtonLink>
+          <>
+            {purchase.status === "ACTIVE" ? (
+              <ButtonLink href="/dashboard/service-requests/new">Open a Claim</ButtonLink>
+            ) : null}
+            <ButtonLink href="/plans" variant="secondary">
+              Compare other plans
+            </ButtonLink>
+          </>
         }
       />
 

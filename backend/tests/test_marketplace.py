@@ -1,7 +1,7 @@
 """Service catalog, custom plans, cart, pricing, checkout and the order lifecycle."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -52,7 +52,8 @@ def catalog(db):
 def area_tech(db, people):
     """A technician serving Florida, so visit slots exist for the FL customer."""
     tech = people["tech"]
-    db.add(TechnicianProfile(user_id=tech.id, service_states=["FL"], service_zip_prefixes=[], specialties=[]))
+    db.add(TechnicianProfile(user_id=tech.id, service_states=["FL"], service_zip_prefixes=[], specialties=[],
+                             work_days=list(range(7)), work_start=time(6), work_end=time(21)))
     db.commit()
     return tech
 

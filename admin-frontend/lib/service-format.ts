@@ -187,6 +187,38 @@ export function formatVisit(startIso: string, endIso: string, timeZone: string):
   return `${start} – ${end}`;
 }
 
+const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** "Mon–Fri 08:00–17:00" style summary of working hours (days Mon=0..Sun=6). */
+export function formatWorkingHours(days: number[], start: string, end: string): string {
+  const sorted = [...days].sort((a, b) => a - b);
+  const contiguous = sorted.length > 2 && sorted.every((d, i) => i === 0 || d === sorted[i - 1] + 1);
+  const dayText =
+    sorted.length === 0
+      ? "No days"
+      : sorted.length === 7
+        ? "Every day"
+        : contiguous
+          ? `${DAY_SHORT[sorted[0]]}–${DAY_SHORT[sorted[sorted.length - 1]]}`
+          : sorted.map((d) => DAY_SHORT[d]).join(", ");
+  return `${dayText} ${start.slice(0, 5)}–${end.slice(0, 5)}`;
+}
+
+/** Split a UTC timestamp into local date (YYYY-MM-DD) and time (HH:MM) in a zone. */
+export function localDateTimeParts(iso: string, timeZone: string): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
+}
+
 /** Today's date (YYYY-MM-DD) in a time zone, for date-input minimums. */
 export function todayInZone(timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
