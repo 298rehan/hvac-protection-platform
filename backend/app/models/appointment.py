@@ -1,4 +1,4 @@
-"""The `appointments` table - a confirmed technician visit for a claim.
+"""The `appointments` table - a confirmed technician visit for a claim or a service order.
 
 Times are stored in UTC. `timezone` is the property's IANA zone, used to show
 the visit in local time. Only CONFIRMED appointments block a technician's time.
@@ -6,7 +6,7 @@ the visit in local time. Only CONFIRMED appointments block a technician's time.
 
 from datetime import datetime
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, Enum as SAEnum, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.session import Base
@@ -17,11 +17,21 @@ from app.models.user import User
 
 class Appointment(Base):
     __tablename__ = "appointments"
-    __table_args__ = (Index("ix_appointments_technician_time", "technician_id", "start_at", "end_at"),)
+    __table_args__ = (
+        Index("ix_appointments_technician_time", "technician_id", "start_at", "end_at"),
+        # Each visit belongs to exactly one claim or one service order.
+        CheckConstraint(
+            "(service_request_id IS NULL) <> (service_order_id IS NULL)",
+            name="ck_appointments_single_owner",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    service_request_id: Mapped[int] = mapped_column(
-        ForeignKey("service_requests.id", ondelete="CASCADE"), nullable=False, index=True
+    service_request_id: Mapped[int | None] = mapped_column(
+        ForeignKey("service_requests.id", ondelete="CASCADE"), index=True
+    )
+    service_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("service_orders.id", ondelete="CASCADE"), index=True
     )
     technician_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

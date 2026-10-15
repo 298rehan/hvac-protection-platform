@@ -19,8 +19,11 @@ from app.core.config import settings
 from app.routers import (
     ac_units,
     auth,
+    catalog,
+    custom_plans,
     customers,
     dashboard,
+    orders,
     photos,
     plans,
     purchases,
@@ -99,6 +102,9 @@ app = FastAPI(
         {"name": "Service Requests", "description": "Repair and maintenance job lifecycle."},
         {"name": "Photos", "description": "Private photo uploads via presigned S3 URLs."},
         {"name": "Technicians", "description": "Technician accounts (admin)."},
+        {"name": "Service Catalog", "description": "HVAC services, prices, quotes and availability."},
+        {"name": "Custom Plans & Cart", "description": "Saved custom plans and the shopping cart."},
+        {"name": "Service Orders", "description": "Checkout (pay on service) and the order lifecycle."},
     ],
 )
 
@@ -122,6 +128,9 @@ app.include_router(ac_units.router)
 app.include_router(service_requests.router)
 app.include_router(photos.router)
 app.include_router(technicians.router)
+app.include_router(catalog.router)
+app.include_router(custom_plans.router)
+app.include_router(orders.router)
 
 
 # --- Error handling -------------------------------------------------------

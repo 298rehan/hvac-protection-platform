@@ -1,5 +1,6 @@
 """Application settings, loaded from environment variables / the .env file."""
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic import Field, field_validator
@@ -64,6 +65,13 @@ class Settings(BaseSettings):
     max_photos_per_category: int = 10
     # Unconfirmed uploads older than this are removed (row + S3 object).
     pending_upload_ttl_minutes: int = 60
+
+    # --- Service orders ----------------------------------------------------
+    currency: str = "USD"
+    # Applied only when greater than zero. No tax rate is assumed: set the
+    # rate that actually applies to your business (e.g. 0.0825 for 8.25%).
+    service_tax_rate: Decimal = Decimal("0")
+    service_booking_fee: Decimal = Decimal("0")
 
     # --- Activity outbox worker -------------------------------------------
     activity_worker_enabled: bool = True

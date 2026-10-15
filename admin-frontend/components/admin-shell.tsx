@@ -6,6 +6,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 
 import {
   ChevronRightIcon,
+  ClipboardIcon,
   ClockIcon,
   CloseIcon,
   GridIcon,
@@ -14,6 +15,7 @@ import {
   MenuIcon,
   ReceiptIcon,
   ShieldIcon,
+  TagIcon,
   UsersIcon,
   WrenchIcon,
 } from "@/components/icons";
@@ -33,6 +35,8 @@ interface NavItem {
 const ADMIN_NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: GridIcon, match: (p) => p === "/" },
   { href: "/service-requests", label: "Claims", icon: WrenchIcon },
+  { href: "/orders", label: "Orders", icon: ClipboardIcon },
+  { href: "/catalog", label: "Services", icon: TagIcon },
   { href: "/customers", label: "Customers", icon: UsersIcon },
   { href: "/technicians", label: "Technicians", icon: ShieldIcon },
   { href: "/plans", label: "Plans", icon: LayersIcon },
@@ -47,6 +51,7 @@ const TECHNICIAN_NAV: NavItem[] = [
     match: (p) => p === "/technician" || p.startsWith("/technician/jobs"),
   },
   { href: "/technician/history", label: "Job history", icon: ClockIcon },
+  { href: "/technician/orders", label: "Service orders", icon: ClipboardIcon },
 ];
 
 function isActive(pathname: string, item: NavItem) {

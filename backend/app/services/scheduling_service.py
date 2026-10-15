@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.regions import state_timezone
@@ -93,6 +93,7 @@ def confirmed_overlaps(
     end: datetime,
     *,
     exclude_request_id: int | None = None,
+    exclude_order_id: int | None = None,
     for_booking: bool = False,
 ) -> list[Appointment]:
     """Confirmed visits overlapping [start, end).
@@ -108,8 +109,16 @@ def confirmed_overlaps(
         Appointment.start_at < end,
         Appointment.end_at > start,
     )
+    # NULL-safe: an order's appointment has service_request_id NULL, and in SQL
+    # "NULL != 5" is not true, so a plain != would silently skip it.
     if exclude_request_id is not None:
-        stmt = stmt.where(Appointment.service_request_id != exclude_request_id)
+        stmt = stmt.where(
+            or_(Appointment.service_request_id.is_(None), Appointment.service_request_id != exclude_request_id)
+        )
+    if exclude_order_id is not None:
+        stmt = stmt.where(
+            or_(Appointment.service_order_id.is_(None), Appointment.service_order_id != exclude_order_id)
+        )
     if for_booking:
         stmt = stmt.with_for_update()
     return list(db.execute(stmt.order_by(Appointment.start_at)).scalars())

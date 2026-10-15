@@ -154,7 +154,7 @@ function ServiceRequestList() {
             requests.length > 0 || offset > 0 ? (
               <div className="flex items-center justify-between gap-3">
                 <span>
-                  Showing {requests.length === 0 ? 0 : offset + 1}�{offset + requests.length}
+                  Showing {requests.length === 0 ? 0 : offset + 1}–{offset + requests.length}
                 </span>
                 <span className="flex gap-2">
                   <Button

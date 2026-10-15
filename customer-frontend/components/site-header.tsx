@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import {
+  CartIcon,
   ChevronDownIcon,
   ClipboardIcon,
   CloseIcon,
   HomeIcon,
+  ListIcon,
   LogoutIcon,
   MenuIcon,
   ReceiptIcon,
@@ -17,6 +19,7 @@ import {
   UserIcon,
 } from "@/components/icons";
 import { Logo } from "@/components/logo";
+import { CartLink } from "@/components/marketplace/cart-link";
 import { ButtonLink } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { cx } from "@/lib/format";
@@ -24,6 +27,7 @@ import { cx } from "@/lib/format";
 const PUBLIC_LINKS = [
   { href: "/", label: "Home" },
   { href: "/plans", label: "Plans" },
+  { href: "/services", label: "Services" },
   { href: "/contact", label: "Contact" },
 ];
 
@@ -32,6 +36,9 @@ const ACCOUNT_LINKS = [
   { href: "/dashboard/my-plan", label: "My Plan", icon: ShieldIcon },
   { href: "/dashboard/ac-units", label: "My AC Units", icon: SnowflakeIcon },
   { href: "/dashboard/service-requests", label: "Claims", icon: ClipboardIcon },
+  { href: "/dashboard/orders", label: "Service Orders", icon: ReceiptIcon },
+  { href: "/dashboard/custom-plan", label: "Custom Plan", icon: ListIcon },
+  { href: "/cart", label: "Cart", icon: CartIcon },
   { href: "/dashboard/purchases", label: "My Purchases", icon: ReceiptIcon },
   { href: "/dashboard/profile", label: "Profile", icon: UserIcon },
 ];
@@ -83,6 +90,8 @@ export function SiteHeader() {
           {loading ? (
             <span className="h-9 w-40 animate-pulse rounded-lg bg-slate-100" aria-hidden />
           ) : user ? (
+            <>
+            <CartLink userId={user.id} />
             <AccountMenu
               name={`${user.first_name} ${user.last_name}`}
               email={user.email}
@@ -90,6 +99,7 @@ export function SiteHeader() {
               pathname={pathname}
               onLogout={logout}
             />
+            </>
           ) : (
             <>
               <ButtonLink href="/login" variant="secondary">

@@ -186,3 +186,17 @@ export const UserPlusIcon = icon(
     <path d="M4.5 19.5a5.5 5.5 0 0 1 11 0M18 8.5v5M15.5 11h5" />
   </>,
 );
+
+export const TagIcon = icon(
+  <>
+    <path d="M3 12V4.5A1.5 1.5 0 0 1 4.5 3H12l9 9-9 9-9-9Z" />
+    <circle cx="7.5" cy="7.5" r="1.3" />
+  </>,
+);
+
+export const ClipboardIcon = icon(
+  <>
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h3" />
+  </>,
+);

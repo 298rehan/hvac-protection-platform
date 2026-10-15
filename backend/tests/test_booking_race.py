@@ -81,3 +81,51 @@ def test_simultaneous_overlapping_bookings(client, db):
     with SessionLocal() as s:
         confirmed = s.query(Appointment).filter_by(technician_id=tech_id, status=AppointmentStatus.CONFIRMED).count()
     assert confirmed == 1
+
+
+def test_simultaneous_duplicate_checkout_creates_one_order(client, db):
+    """Double-click / retry race: same idempotency key submitted twice at once."""
+    import uuid
+    from decimal import Decimal
+
+    from app.models import HvacService, PricingType, ServiceCategory, ServiceOrder
+    from app.schemas.order import CheckoutIn
+    from app.services import order_service
+
+    customer = make_user(db, UserRole.CUSTOMER, "buyer@example.com", state="TX")
+    tech = make_user(db, UserRole.TECHNICIAN, "tech2@example.com", state="TX")
+    db.add(TechnicianProfile(user_id=tech.id, service_states=["TX"], service_zip_prefixes=[], specialties=[]))
+    category = ServiceCategory(name="Servicing", slug="servicing", description="", icon="wrench")
+    db.add(category)
+    db.flush()
+    service = HvacService(slug="insp", name="Inspection", description="", category_id=category.id,
+                          pricing_type=PricingType.FIXED, price=Decimal("40"), allowed_frequencies=["ONE_TIME"])
+    db.add(service)
+    db.commit()
+    customer_id, service_id = customer.id, service.id
+
+    payload = CheckoutIn(
+        idempotency_key=str(uuid.uuid4()), items=[{"service_id": service_id}],
+        address="1 Main", city="Houston", state="TX", zip_code="77002",
+        requested_date=date.today() + timedelta(days=5), requested_window="MORNING",
+    )
+    barrier = threading.Barrier(2)
+    results = []
+
+    def submit():
+        with SessionLocal() as session:
+            buyer = session.get(User, customer_id)
+            barrier.wait()
+            order, created = order_service.checkout(session, customer=buyer, payload=payload)
+            results.append((order.id, created))
+
+    threads = [threading.Thread(target=submit) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len({order_id for order_id, _ in results}) == 1
+    assert sorted(created for _, created in results) == [False, True]
+    with SessionLocal() as s:
+        assert s.query(ServiceOrder).count() == 1

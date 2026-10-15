@@ -394,3 +394,182 @@ export interface PhotoUploadTicket {
   expires_in: number;
   max_bytes: number;
 }
+
+/* ------------------------------------------------------------------ *
+ * Service catalog and orders
+ * ------------------------------------------------------------------ */
+
+export type PricingType = "FIXED" | "STARTING_AT" | "PER_UNIT";
+export type ServiceFrequency = "ONE_TIME" | "MONTHLY" | "QUARTERLY" | "YEARLY";
+export type DiscountType = "PERCENT" | "AMOUNT";
+export type OrderStatus =
+  | "PENDING_CONFIRMATION"
+  | "CONFIRMED"
+  | "SCHEDULED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED";
+export type PaymentStatus = "PENDING" | "PAID" | "VOID";
+export type PaymentMethod = "PAY_ON_SERVICE";
+
+export interface ServiceCategory {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface CategoryPayload {
+  name: string;
+  description: string;
+  icon: string;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface ServiceAddon {
+  id: number;
+  name: string;
+  /** Decimal string. */
+  price: string;
+  is_active: boolean;
+}
+
+export interface CatalogService {
+  id: number;
+  category: { id: number; name: string; slug: string };
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  image_url: string | null;
+  pricing_type: PricingType;
+  price: string;
+  unit_label: string | null;
+  max_quantity: number;
+  duration_minutes: number;
+  allowed_frequencies: ServiceFrequency[];
+  /** null = offered everywhere. */
+  available_states: string[] | null;
+  is_active: boolean;
+  display_order: number;
+  requires_inspection: boolean;
+  addons: ServiceAddon[];
+}
+
+export interface AddonPayload {
+  id?: number | null;
+  name: string;
+  price: string;
+  is_active: boolean;
+}
+
+export interface ServicePayload {
+  category_id: number;
+  name: string;
+  description: string;
+  icon: string;
+  image_url: string | null;
+  pricing_type: PricingType;
+  price: string;
+  unit_label: string | null;
+  max_quantity: number;
+  duration_minutes: number;
+  allowed_frequencies: ServiceFrequency[];
+  available_states: string[] | null;
+  is_active: boolean;
+  display_order: number;
+  addons: AddonPayload[];
+}
+
+export interface DiscountCode {
+  id: number;
+  code: string;
+  discount_type: DiscountType;
+  value: string;
+  min_subtotal: string;
+  max_uses: number | null;
+  times_used: number;
+  expires_at: string | null;
+  is_active: boolean;
+}
+
+export interface DiscountPayload {
+  code: string;
+  discount_type: DiscountType;
+  value: string;
+  min_subtotal: string;
+  max_uses: number | null;
+  expires_at: string | null;
+  is_active: boolean;
+}
+
+export interface OrderItem {
+  id: number;
+  service_id: number | null;
+  service_name: string;
+  pricing_type: PricingType;
+  unit_price: string;
+  quantity: number;
+  frequency: ServiceFrequency;
+  addons: { name: string; price: string }[];
+  line_total: string;
+  duration_minutes: number;
+  is_estimate: boolean;
+}
+
+export interface OrderListItem {
+  id: number;
+  status: OrderStatus;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
+  currency: string;
+  total: string;
+  total_is_estimate: boolean;
+  /** YYYY-MM-DD in the property's time zone. */
+  requested_date: string;
+  requested_window: PreferredWindowName;
+  city: string;
+  state: string;
+  created_at: string;
+  item_count: number;
+  service_names: string[];
+  timezone: string;
+  appointment: Appointment | null;
+  technician: TechnicianBrief | null;
+  customer: CustomerSummary | null;
+}
+
+export interface OrderDetail extends OrderListItem {
+  address: string;
+  zip_code: string;
+  ac_unit_id: number | null;
+  custom_plan_id: number | null;
+  customer_notes: string | null;
+  subtotal: string;
+  discount_code: string | null;
+  discount_amount: string;
+  tax_amount: string;
+  fee_amount: string;
+  status_reason: string | null;
+  confirmed_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  paid_at: string | null;
+  total_duration_minutes: number;
+  items: OrderItem[];
+}
+
+export interface OrderTechnician {
+  id: number;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  service_states: string[];
+  service_zip_prefixes: string[];
+  free_in_requested_window: boolean;
+  open_jobs: number;
+}

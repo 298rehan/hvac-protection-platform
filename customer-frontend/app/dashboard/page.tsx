@@ -7,6 +7,7 @@ import {
   ArrowRightIcon,
   CalendarIcon,
   ClipboardIcon,
+  ListIcon,
   MapPinIcon,
   ReceiptIcon,
   ShieldIcon,
@@ -200,6 +201,18 @@ export default function DashboardPage() {
           icon={<ClipboardIcon />}
           title="Claims"
           body="File a claim for a repair or maintenance visit and follow its progress."
+        />
+        <QuickLink
+          href="/dashboard/custom-plan"
+          icon={<ListIcon />}
+          title="Build a custom plan"
+          body="Pick the individual HVAC services you need and see the price as you go."
+        />
+        <QuickLink
+          href="/dashboard/orders"
+          icon={<ReceiptIcon />}
+          title="Service orders"
+          body="Track booked services, upcoming visits and payment status."
         />
       </div>
 

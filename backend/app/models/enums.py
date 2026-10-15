@@ -170,3 +170,64 @@ class PhotoStatus(str, Enum):
 
     PENDING = "PENDING"
     UPLOADED = "UPLOADED"
+
+
+# --- Service catalog and orders ------------------------------------------------
+
+
+class PricingType(str, Enum):
+    FIXED = "FIXED"  # one confirmed price per unit
+    STARTING_AT = "STARTING_AT"  # estimate; final price set after inspection
+    PER_UNIT = "PER_UNIT"  # price x quantity (e.g. per filter)
+
+
+class ServiceFrequency(str, Enum):
+    ONE_TIME = "ONE_TIME"
+    MONTHLY = "MONTHLY"
+    QUARTERLY = "QUARTERLY"
+    YEARLY = "YEARLY"
+
+
+class CustomPlanKind(str, Enum):
+    PLAN = "PLAN"  # a named, saved custom plan
+    CART = "CART"  # the customer's single shopping cart
+
+
+class DiscountType(str, Enum):
+    PERCENT = "PERCENT"
+    AMOUNT = "AMOUNT"
+
+
+class OrderStatus(str, Enum):
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
+    CONFIRMED = "CONFIRMED"
+    SCHEDULED = "SCHEDULED"  # technician assigned and visit booked
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class PaymentMethod(str, Enum):
+    # No payment gateway exists: the customer pays the technician on the day.
+    PAY_ON_SERVICE = "PAY_ON_SERVICE"
+
+
+class PaymentStatus(str, Enum):
+    PENDING = "PENDING"  # nothing has been charged
+    PAID = "PAID"  # recorded by an admin after payment was received
+    VOID = "VOID"  # order cancelled before payment
+
+
+TERMINAL_ORDER_STATUSES = frozenset({OrderStatus.COMPLETED, OrderStatus.CANCELLED})
+
+_O = OrderStatus
+# Allowed order status changes and who may make them (customer, admin, technician).
+ORDER_TRANSITIONS: dict[tuple[OrderStatus, OrderStatus], frozenset[UserRole]] = {
+    (_O.PENDING_CONFIRMATION, _O.CONFIRMED): frozenset({_A}),
+    (_O.PENDING_CONFIRMATION, _O.CANCELLED): frozenset({_C, _A}),
+    (_O.CONFIRMED, _O.SCHEDULED): frozenset({_A}),
+    (_O.CONFIRMED, _O.CANCELLED): frozenset({_C, _A}),
+    (_O.SCHEDULED, _O.IN_PROGRESS): frozenset({_T}),
+    (_O.SCHEDULED, _O.CANCELLED): frozenset({_A}),
+    (_O.IN_PROGRESS, _O.COMPLETED): frozenset({_T, _A}),
+}

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ClipboardIcon,
   HomeIcon,
+  ListIcon,
   ReceiptIcon,
   ShieldIcon,
   SnowflakeIcon,
@@ -19,6 +20,9 @@ const TABS = [
   { href: "/dashboard/my-plan", label: "My Plan", icon: ShieldIcon },
   { href: "/dashboard/ac-units", label: "AC Units", icon: SnowflakeIcon },
   { href: "/dashboard/service-requests", label: "Claims", icon: ClipboardIcon },
+  { href: "/dashboard/orders", label: "Orders", icon: ReceiptIcon },
+  { href: "/dashboard/custom-plan", label: "Custom Plan", icon: ListIcon },
+  { href: "/dashboard/plans", label: "Saved Plans", icon: ClipboardIcon },
   { href: "/dashboard/purchases", label: "My Purchases", icon: ReceiptIcon },
   { href: "/dashboard/profile", label: "Profile", icon: UserIcon },
 ];

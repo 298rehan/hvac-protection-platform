@@ -92,6 +92,12 @@ for port in 3000 3001; do
     || echo "WARNING: frontend on :${port} did not respond yet"
 done
 
+step "Adding any missing starter catalog services"
+# Insert-only and keyed by slug: existing services and admin price edits are
+# never changed, so this is safe on every deploy.
+docker compose exec -T backend python seed_catalog.py \
+  || echo "WARNING: catalog seed failed - the app is running; retry with: docker compose exec backend python seed_catalog.py"
+
 step "Cleaning up dangling images"
 docker image prune -f >/dev/null
 

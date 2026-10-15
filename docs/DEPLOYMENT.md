@@ -119,8 +119,8 @@ cd /home/ubuntu/hvac-project/hvac-protection-platform
 export IMAGE_TAG=<commit sha from the GitHub Actions run>
 
 docker compose run --rm --no-deps backend alembic current     # where the server is now
-docker compose run --rm --no-deps backend alembic upgrade head # applies 0002 and/or 0003 as needed
-docker compose run --rm --no-deps backend alembic current     # expect 0003_claims_scheduling (head)
+docker compose run --rm --no-deps backend alembic upgrade head # applies every pending migration (0002-0004)
+docker compose run --rm --no-deps backend alembic current     # expect 0004_service_marketplace (head)
 ```
 
 What `0002_maintenance_workflow` does (additive only):
@@ -138,6 +138,21 @@ What `0003_claims_scheduling` does (additive only):
   `appointments` (UTC start/end, property time zone, CONFIRMED/CANCELLED).
 * Verified on a disposable MySQL 8.0.46: upgrade from 0002 with existing rows,
   `alembic check`, the downgrade guard, and a downgrade/re-upgrade cycle.
+
+What `0004_service_marketplace` does (additive only):
+* Creates `service_categories`, `hvac_services`, `service_addons`,
+  `discount_codes`, `custom_plans`, `custom_plan_items`, `service_orders`,
+  `service_order_items` (all money columns `DECIMAL(10,2)`).
+* `appointments.service_request_id` becomes nullable and `appointments` gains
+  `service_order_id` plus a CHECK that exactly one of them is set. Existing
+  appointment rows are unchanged.
+* Verified on a disposable MySQL 8.0.46 with an existing claim appointment:
+  upgrade, `alembic check`, CHECK constraint, downgrade guard (refuses while
+  orders exist), downgrade/re-upgrade.
+
+The starter catalog is added by `python seed_catalog.py`, which the deploy
+script runs after every deploy. It is insert-only by slug, so it never
+duplicates services or overwrites admin price changes.
 
 The **old application keeps working on the migrated schema**. It doesn't read
 the new column or tables, so migrating before the deploy causes no downtime.
@@ -304,6 +319,35 @@ apps; URLs unchanged).
   email through the existing EMAIL_MODE settings (console/file/smtp).
 * **Availability** means "no conflicting confirmed visit". Working hours,
   holidays and travel time are not modelled yet.
+
+## Service marketplace and Custom Plan Builder
+
+* **Catalog:** categories, services (FIXED, STARTING_AT = estimate, PER_UNIT),
+  add-ons, allowed frequencies, state availability and discount codes, all
+  managed in Admin → Services. Starter prices from `seed_catalog.py` are
+  **illustrative demo prices**.
+* **Pricing:** one server function (`services/pricing_service.py`) prices quotes,
+  saved plans, the cart and checkout from database values. Checkout ignores any
+  price sent by the browser and copies names and prices onto the order, so later
+  catalog changes never alter existing orders. Tax and booking fee are applied
+  only when `SERVICE_TAX_RATE` / `SERVICE_BOOKING_FEE` are set above 0.
+* **Payment:** there is no payment gateway. Orders are **pay on service**:
+  nothing is charged online. An admin records PAID only after the order is
+  completed and every estimated price has been confirmed. Payment status is
+  separate from order status.
+* **Booking:** the customer requests a date and window. Checkout only accepts a
+  window in which at least one technician serving the address has no confirmed
+  visit. The admin then books the real appointment with the same conflict-safe
+  logic as claims; claims and orders share one technician calendar.
+* **Safety:** idempotency keys (unique per customer) stop double-clicks and
+  retries from creating duplicate orders (tested concurrently on MySQL); the
+  order and its lines are written in one transaction.
+* **Order lifecycle:** Pending confirmation → Confirmed → Scheduled (technician
+  booked) → In progress → Completed; Cancelled by the customer before booking,
+  or by an admin before work starts.
+* **Not included:** online card payments, automatic recurring billing or
+  automatic scheduling of recurring visits (frequency is recorded per item),
+  and email notifications for orders.
 
 ## Contact Us (serverless, separate from the backend)
 
