@@ -63,8 +63,8 @@ EXE_BYTES = b"MZ\x90\x00" + b"\x00" * 64
 # One shared in-memory database; StaticPool keeps the single connection alive
 # across the TestClient's worker thread.
 # TEST_DATABASE_URL runs the suite against a real (disposable!) MySQL database,
-# e.g. in CI. Every test drops and recreates all tables, so never point it at a
-# database you care about.
+# e.g. in CI. The suite drops all tables and deletes every row between tests,
+# so never point it at a database you care about.
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 if TEST_DATABASE_URL:
     engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
@@ -84,11 +84,29 @@ else:
 SessionLocal.configure(bind=engine)
 
 
-@pytest.fixture(autouse=True)
-def database():
+@pytest.fixture(scope="session", autouse=True)
+def schema():
+    """Create the tables once per test run (rebuilding them for every test took
+    about 3 s per test on MySQL)."""
+    Base.metadata.drop_all(engine)  # leftovers from an interrupted earlier run
     Base.metadata.create_all(engine)
     yield
     Base.metadata.drop_all(engine)
+
+
+# Children before parents, so foreign keys never block a delete.
+_TABLES_CHILDREN_FIRST = [t.name for t in reversed(Base.metadata.sorted_tables)]
+
+
+@pytest.fixture(autouse=True)
+def database(schema):
+    """Every test starts with empty tables - the same isolation as recreating
+    them, at a fraction of the cost. Rows are committed, so tests that use
+    several connections at once (the booking races) still see real data."""
+    with engine.begin() as connection:
+        for name in _TABLES_CHILDREN_FIRST:
+            connection.execute(text(f"DELETE FROM {name}"))
+    yield
 
 
 @pytest.fixture(autouse=True)

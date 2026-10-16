@@ -20,31 +20,33 @@ jobs:
   # --------------------------------------------------------- MySQL checks
   backend-mysql:
     name: Backend MySQL and migrations
-    runs-on: ubuntu-latest
+    # Pinned so the preinstalled MySQL stays on the 8.0 series (checked below).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
-
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: ci-root-password
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
 
     defaults:
       run:
         working-directory: backend
 
     env:
-      MYSQL_URL_BASE: mysql+pymysql://root:ci-root-password@127.0.0.1:3306
+      # The runner's preinstalled MySQL uses root/root. Throwaway CI database only.
+      MYSQL_URL_BASE: mysql+pymysql://root:root@127.0.0.1:3306
 
     steps:
       - uses: actions/checkout@v4
+
+      # The runner image ships MySQL 8.0 (stopped). Starting it takes a few
+      # seconds, instead of ~35 s to pull and initialise a mysql:8.0 service
+      # container on every run.
+      - name: Start MySQL 8.0
+        run: |
+          sudo systemctl start mysql.service
+          version="$(mysql -h 127.0.0.1 -uroot -proot -N -e 'SELECT VERSION();')"
+          echo "MySQL server version: ${version}"
+          case "$version" in
+            8.0.*) ;;
+            *) echo "::error::Expected MySQL 8.0 (production version), got ${version}"; exit 1 ;;
+          esac
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -60,7 +62,7 @@ jobs:
 
       - name: Create CI databases
         run: |
-          mysql -h 127.0.0.1 -uroot -pci-root-password -e \
+          mysql -h 127.0.0.1 -uroot -proot -e \
             "CREATE DATABASE hvac_migrations CHARACTER SET utf8mb4;
              CREATE DATABASE hvac_tests CHARACTER SET utf8mb4;"
 

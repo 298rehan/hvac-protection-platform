@@ -278,9 +278,14 @@ def test_checkout_requires_available_slot(client, catalog, people):
 
 
 def test_past_or_far_dates_rejected(client, catalog, people, area_tech):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
     own = headers(people["customer"])
+    # The backend uses the property's local date (Miami), not this machine's or UTC.
+    today_in_miami = datetime.now(ZoneInfo("America/New_York")).date()
     for offset in (-2, 0, 90):
-        body = checkout_body([item(catalog["inspection"])], requested_date=(date.today() + timedelta(days=offset)).isoformat())
+        body = checkout_body([item(catalog["inspection"])], requested_date=(today_in_miami + timedelta(days=offset)).isoformat())
         assert client.post("/api/orders", json=body, headers=own).status_code == 400
 
 
