@@ -1,11 +1,3 @@
-# Production stack on the EC2 host. MySQL runs on the host itself (reached via
-# host.docker.internal) and is not part of this file; Nginx on the host proxies
-# to the published ports below.
-#
-# Images are built and pushed by GitHub Actions; `docker compose pull` fetches
-# them. IMAGE_TAG pins a deploy to one commit (defaults to latest). `build:` is
-# kept so `docker compose build` still works for local development.
-
 services:
   backend:
     image: ghcr.io/298rehan/hvac-protection-platform-backend:${IMAGE_TAG:-latest}
