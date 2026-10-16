@@ -1,3 +1,4 @@
+
 name: Build and Deploy to EC2
 
 on:
@@ -11,16 +12,16 @@ on:
 permissions:
   contents: read
 
-# Never run two deploys at once; a newer push waits for the running one.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # ------------------------------------------------------------------ checks
-  backend:
-    name: Backend tests (MySQL 8.0)
+  # --------------------------------------------------------- MySQL checks
+  backend-mysql:
+    name: Backend MySQL and migrations
     runs-on: ubuntu-latest
+
     services:
       mysql:
         image: mysql:8.0
@@ -30,13 +31,17 @@ jobs:
           - 3306:3306
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password"
-          --health-interval=5s --health-timeout=5s --health-retries=20
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     defaults:
       run:
         working-directory: backend
+
     env:
-      # Throwaway CI database credentials, not a secret.
       MYSQL_URL_BASE: mysql+pymysql://root:ci-root-password@127.0.0.1:3306
+
     steps:
       - uses: actions/checkout@v4
 
@@ -56,30 +61,71 @@ jobs:
           mysql -h 127.0.0.1 -uroot -pci-root-password -e \
             "CREATE DATABASE hvac_migrations CHARACTER SET utf8mb4; CREATE DATABASE hvac_tests CHARACTER SET utf8mb4;"
 
-      - name: Migrations - single head, upgrade, model check, downgrade, re-upgrade
+      - name: Migration checks
         env:
           DATABASE_URL: ${{ env.MYSQL_URL_BASE }}/hvac_migrations?charset=utf8mb4
         run: |
-          test "$(alembic heads | grep -c .)" -eq 1 || { echo "Expected exactly one migration head"; alembic heads; exit 1; }
+          test "$(alembic heads | grep -c .)" -eq 1 || {
+            echo "Expected exactly one migration head"
+            alembic heads
+            exit 1
+          }
+
           python migration_status.py | tee /tmp/status.txt
           grep -q '^STATUS=pending$' /tmp/status.txt
+
           alembic upgrade head
+
           python migration_status.py | tee /tmp/status.txt
           grep -q '^STATUS=up_to_date$' /tmp/status.txt
+
           alembic check
           alembic downgrade base
           alembic upgrade head
 
-      - name: Deploy scripts - shellcheck and a real backup against MySQL
+      - name: Backup script checks
         working-directory: .
         run: |
           shellcheck deploy/*.sh
           python3 -m py_compile deploy/backup-db.py
-          fake="$RUNNER_TEMP/fakerepo"; mkdir -p "$fake/deploy"
+
+          fake="$RUNNER_TEMP/fakerepo"
+          mkdir -p "$fake/deploy"
           cp deploy/backup-db.py "$fake/deploy/"
           echo "DATABASE_URL=${MYSQL_URL_BASE}/hvac_migrations?charset=utf8mb4" > "$fake/.env"
-          BACKUP_DIR="$RUNNER_TEMP/backups" python3 "$fake/deploy/backup-db.py" ci | tee /tmp/backup.txt
+
+          BACKUP_DIR="$RUNNER_TEMP/backups" \
+            python3 "$fake/deploy/backup-db.py" ci | tee /tmp/backup.txt
+
           grep -q '^BACKUP_FILE=' /tmp/backup.txt
+
+      - name: Test suite (MySQL)
+        env:
+          TEST_DATABASE_URL: ${{ env.MYSQL_URL_BASE }}/hvac_tests?charset=utf8mb4
+        run: pytest
+
+  # --------------------------------------------------------- SQLite/Lambda
+  backend-tests:
+    name: Backend SQLite and Lambda tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
 
       - name: Test suite (SQLite)
         run: pytest
@@ -87,41 +133,48 @@ jobs:
       - name: Contact Us Lambda tests
         run: python -m pytest ../lambda/contact -p no:cacheprovider
 
-      - name: Test suite (MySQL)
-        env:
-          TEST_DATABASE_URL: ${{ env.MYSQL_URL_BASE }}/hvac_tests?charset=utf8mb4
-        run: pytest
-
+  # --------------------------------------------------------- Frontends
   frontend:
     name: Frontend (${{ matrix.app }})
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
-        app: [customer-frontend, admin-frontend]
+        app:
+          - customer-frontend
+          - admin-frontend
+
     defaults:
       run:
         working-directory: ${{ matrix.app }}
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
           cache: npm
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
 
-      - run: npm ci --no-audit --no-fund
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
       - name: Lint
         run: npm run lint
+
       - name: Type check
         run: npx tsc --noEmit
+
       - name: Production build
         run: npm run build
 
+  # --------------------------------------------------------- Terraform
   terraform:
     name: Terraform fmt / validate
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -132,43 +185,54 @@ jobs:
       - name: Format
         run: terraform fmt -check -recursive terraform
 
-      # Static validation only: no backend, no AWS credentials. Plans and
-      # applies are run locally and reviewed by a person (terraform/README.md).
-      - name: Validate (main)
+      - name: Validate main Terraform
         working-directory: terraform
         run: |
           terraform init -backend=false -input=false
           terraform validate
 
-      - name: Validate (bootstrap)
+      - name: Validate bootstrap Terraform
         working-directory: terraform/bootstrap
         run: |
           terraform init -backend=false -input=false
           terraform validate
 
-  # ------------------------------------------------------- build and deploy
+  # --------------------------------------------------------- Build images
   build-and-push:
     name: Build and push images
-    needs: [backend, frontend, terraform]
+    needs:
+      - backend-mysql
+      - backend-tests
+      - frontend
+      - terraform
+
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
+
     strategy:
+      fail-fast: false
       matrix:
         include:
           - context: ./backend
             image: ghcr.io/298rehan/hvac-protection-platform-backend
             api_url: ""
+            contact_api_url: ""
+
           - context: ./customer-frontend
             image: ghcr.io/298rehan/hvac-protection-platform-customer
             api_url: ${{ vars.CUSTOMER_NEXT_PUBLIC_API_URL }}
-            # Public API Gateway URL from `terraform output contact_api_url` (not a secret).
             contact_api_url: ${{ vars.CONTACT_API_URL || 'https://6oqce50a24.execute-api.ap-southeast-2.amazonaws.com/contact' }}
+
           - context: ./admin-frontend
             image: ghcr.io/298rehan/hvac-protection-platform-admin
             api_url: ${{ vars.ADMIN_NEXT_PUBLIC_API_URL }}
+            contact_api_url: ""
+
     steps:
       - uses: actions/checkout@v4
 
@@ -181,8 +245,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # :<sha> pins each deploy (and enables rollback); :latest stays for
-      # manual `docker compose` use on the server.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -197,32 +259,35 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
+  # --------------------------------------------------------- Deploy
   deploy:
     name: Deploy to EC2
     needs: build-and-push
+
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: read
-    # Optional: add required reviewers to this environment in the repo settings
-    # to require a manual approval before every production deploy.
+
     environment: production
+
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE_TAG: ${{ github.sha }}
           GHCR_USER: ${{ github.actor }}
-          # Short-lived token, valid only while this job runs; never echoed.
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: IMAGE_TAG,GHCR_USER,GHCR_TOKEN
           script_stop: true
-          # Backup + migration + image pulls can take a while on a t3.micro.
           command_timeout: 30m
           script: |
             set -euo pipefail
