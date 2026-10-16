@@ -21,6 +21,7 @@ jobs:
   backend-mysql:
     name: Backend MySQL and migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       mysql:
@@ -45,7 +46,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -54,12 +56,13 @@ jobs:
             backend/requirements-dev.txt
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Create CI databases
         run: |
           mysql -h 127.0.0.1 -uroot -pci-root-password -e \
-            "CREATE DATABASE hvac_migrations CHARACTER SET utf8mb4; CREATE DATABASE hvac_tests CHARACTER SET utf8mb4;"
+            "CREATE DATABASE hvac_migrations CHARACTER SET utf8mb4;
+             CREATE DATABASE hvac_tests CHARACTER SET utf8mb4;"
 
       - name: Migration checks
         env:
@@ -102,12 +105,13 @@ jobs:
       - name: Test suite (MySQL)
         env:
           TEST_DATABASE_URL: ${{ env.MYSQL_URL_BASE }}/hvac_tests?charset=utf8mb4
-        run: pytest
+        run: pytest -q --durations=10
 
   # --------------------------------------------------------- SQLite/Lambda
   backend-tests:
     name: Backend SQLite and Lambda tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
@@ -116,7 +120,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -125,18 +130,19 @@ jobs:
             backend/requirements-dev.txt
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Test suite (SQLite)
-        run: pytest
+        run: pytest -q
 
       - name: Contact Us Lambda tests
-        run: python -m pytest ../lambda/contact -p no:cacheprovider
+        run: python -m pytest ../lambda/contact -q -p no:cacheprovider
 
   # --------------------------------------------------------- Frontends
   frontend:
     name: Frontend (${{ matrix.app }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
@@ -152,7 +158,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -174,13 +181,31 @@ jobs:
   terraform:
     name: Terraform fmt / validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.16"
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+          key: terraform-${{ runner.os }}-${{ hashFiles('terraform/**/*.tf', 'terraform/**/*.lock.hcl', 'terraform/bootstrap/**/*.tf', 'terraform/bootstrap/**/*.lock.hcl') }}
+          restore-keys: |
+            terraform-${{ runner.os }}-
+
+      - name: Configure Terraform plugin cache
+        run: |
+          mkdir -p ~/.terraform.d/plugin-cache
+          cat > ~/.terraformrc <<'EOF'
+          plugin_cache_dir = "$HOME/.terraform.d/plugin-cache"
+          EOF
 
       - name: Format
         run: terraform fmt -check -recursive terraform
@@ -209,6 +234,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: read
@@ -236,7 +262,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -267,6 +294,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
+    timeout-minutes: 35
 
     permissions:
       contents: read
@@ -281,7 +309,6 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
