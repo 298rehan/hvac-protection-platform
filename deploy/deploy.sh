@@ -98,8 +98,12 @@ step "Adding any missing starter catalog services"
 docker compose exec -T backend python seed_catalog.py \
   || echo "WARNING: catalog seed failed - the app is running; retry with: docker compose exec backend python seed_catalog.py"
 
+
 step "Cleaning up dangling images"
+
+# Remove only dangling images. Keep tagged release images for rollback.
 docker image prune -f >/dev/null
+
 
 docker compose ps
 
